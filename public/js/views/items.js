@@ -6,6 +6,7 @@ import {
 import { el, toast, confirmDialog, emptyState, loading, stars, select, modal, tagInput } from '../components.js';
 import { go, currentQuery } from '../app.js';
 import { openItemForm } from './item-form.js';
+import { openBulkAdd } from './bulk-add.js';
 
 let lastResult = null;
 
@@ -27,6 +28,7 @@ export async function renderItems(root, params = {}) {
     el('div', { class: 'page-head__actions' },
       el('button', { class: 'btn', onclick: () => exportCsv(f) }, '⤓ خروجی اکسل'),
       el('button', { class: 'btn', onclick: () => window.print() }, '🖨 چاپ'),
+      el('button', { class: 'btn', onclick: () => openBulkAdd(() => renderItems(root, params)) }, '⊞ افزودن گروهی'),
       el('button', { class: 'btn btn--primary', onclick: () => openItemForm(null, () => renderItems(root, params)) }, '＋ رکورد تازه')));
   root.append(head);
 

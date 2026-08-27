@@ -929,3 +929,66 @@ export function seedIfEmpty() {
   log('system', null, 'create', 'راه‌اندازی اولیهٔ آرشیو');
   return true;
 }
+
+/* ============================================================== ثبت گروهی */
+
+/**
+ * ثبت گروهی چند رکورد در یک تراکنش.
+ * `shared` روی همهٔ ردیف‌ها اعمال می‌شود و `rows` مقادیر اختصاصی هر ردیف است.
+ * اگر هر ردیف خطا بدهد، هیچ رکوردی ثبت نمی‌شود (همه یا هیچ).
+ */
+export function createBatch({ shared = {}, rows = [] }, actor) {
+  if (!Array.isArray(rows) || !rows.length) throw new Error('هیچ ردیفی برای ثبت وجود ندارد');
+  if (rows.length > 1000) throw new Error('در هر بار حداکثر ۱۰۰۰ رکورد می‌توان ثبت کرد');
+
+  return tx(() => {
+    const created = [];
+    for (const row of rows) {
+      const { copies: rowCopies, ...rowFields } = row;
+      const payload = { ...shared, ...rowFields };
+
+      // نسخه‌ها: اطلاعات مشترک هارد/پوشه با اطلاعات فایلِ همین ردیف ترکیب می‌شود
+      if (Array.isArray(rowCopies)) {
+        payload.copies = rowCopies.map((c) => ({ ...(shared.copy_defaults || {}), ...c }));
+      } else if (shared.copy_defaults && shared.copy_defaults.drive_id) {
+        payload.copies = [{ ...shared.copy_defaults }];
+      }
+      delete payload.copy_defaults;
+
+      created.push(saveItem(payload, actor));
+    }
+    log('item', null, 'create',
+      `ثبت گروهی ${created.length} رکورد${shared.series ? ` در مجموعهٔ «${shared.series}»` : ''}`, actor);
+    return created;
+  });
+}
+
+/**
+ * بررسی اینکه کدام فایل‌ها از قبل در آرشیو ثبت شده‌اند.
+ * ورودی: شناسهٔ هارد و فهرست {folder_path, file_name}
+ * خروجی: نگاشت «مسیر|نام» به رکوردی که آن را در بر دارد
+ */
+export function findRegisteredFiles(driveId, entries = []) {
+  const map = {};
+  if (!entries.length) return map;
+
+  const rows = driveId
+    ? db.prepare(`SELECT cp.folder_path, cp.file_name, cp.item_id, i.title, i.code
+                  FROM copies cp JOIN items i ON i.id = cp.item_id
+                  WHERE cp.drive_id = ?`).all(Number(driveId))
+    : db.prepare(`SELECT cp.folder_path, cp.file_name, cp.item_id, i.title, i.code
+                  FROM copies cp JOIN items i ON i.id = cp.item_id`).all();
+
+  // کلید بدون حساسیت به بزرگی/کوچکی حروف و جداکنندهٔ مسیر (ویندوز \\ و لینوکس /)
+  const key = (folder, name) =>
+    `${String(folder || '').replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase()}|${String(name || '').toLowerCase()}`;
+
+  const registered = new Map();
+  for (const r of rows) registered.set(key(r.folder_path, r.file_name), r);
+
+  for (const e of entries) {
+    const found = registered.get(key(e.folder_path, e.file_name));
+    if (found) map[`${e.folder_path}|${e.file_name}`] = { item_id: found.item_id, title: found.title, code: found.code };
+  }
+  return map;
+}

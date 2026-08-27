@@ -2,6 +2,8 @@
 import { api, state, num, fa, duration, size, gb, ago, MEDIA_KINDS } from '../core.js';
 import { el, loading, barChart, toast } from '../components.js';
 import { go } from '../app.js';
+import { openBulkAdd } from './bulk-add.js';
+import { openItemForm } from './item-form.js';
 
 export async function renderDashboard(root) {
   root.innerHTML = '';
@@ -20,7 +22,8 @@ export async function renderDashboard(root) {
       el('div', { class: 'page-subtitle' },
         `امروز ${fa(state.today)} — مجموع ${num(s.totals.items)} رکورد روی ${num(s.drives.count)} حافظه`)),
     el('div', { class: 'page-head__actions' },
-      btn('＋ ثبت رکورد تازه', 'btn--primary', () => go('item-new')),
+      btn('⊞ افزودن گروهی مجموعه', 'btn--primary', () => openBulkAdd(() => renderDashboard(root))),
+      btn('＋ ثبت یک رکورد', '', () => openItemForm(null, () => renderDashboard(root))),
       btn('＋ افزودن هارد', '', () => go('drives', { new: 1 })))));
 
   /* ---------------------------------------------------------- کارت‌های آمار */

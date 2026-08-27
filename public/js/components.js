@@ -319,7 +319,12 @@ export function tagInput({ value = [], suggestions = [], placeholder = 'برچس
     el('div', { class: 'row row--tight', style: { alignItems: 'center' } }, chips, input), listBox);
 
   Object.defineProperty(wrap, 'value', {
-    get: () => [...tags],
+    // متنی که کاربر تایپ کرده ولی هنوز Enter نزده هم به حساب می‌آید،
+    // وگرنه با کلیک مستقیم روی «ذخیره» آن برچسب از دست می‌رفت.
+    get: () => {
+      const pending = input.value.trim().replace(/[،,]+$/, '');
+      return pending && !tags.includes(pending) ? [...tags, pending] : [...tags];
+    },
     set: (v) => { tags = [...new Set((v || []).filter(Boolean))]; renderChips(); },
   });
 

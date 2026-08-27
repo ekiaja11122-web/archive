@@ -46,6 +46,10 @@ export const api = {
   deleteItem: (id, soft = true) => request('DELETE', `/items/${id}${soft ? '?soft=1' : ''}`),
   restoreItem: (id) => request('POST', `/restore/${id}`, {}),
   bulk: (payload) => request('POST', '/items/bulk', payload),
+  batchItems: (payload) => request('POST', '/items/batch', payload),
+
+  scan: (payload) => request('POST', '/scan', payload),
+  scanTools: () => request('GET', '/scan/tools'),
 
   createCopy: (data) => request('POST', '/copies', data),
   updateCopy: (id, data) => request('PUT', `/copies/${id}`, data),

@@ -213,14 +213,29 @@ export function setSetting(key, value) {
     .run(key, value == null ? null : String(value));
 }
 
+/**
+ * اجرای یک عملیات درون تراکنش.
+ * تودرتوپذیر است: اگر تابعی که خودش tx دارد (مانند saveItem) درون یک tx دیگر
+ * صدا زده شود، تراکنش تازه‌ای باز نمی‌شود و همه با هم تأیید یا لغو می‌شوند.
+ * این برای ثبت گروهی لازم است، چون SQLite تراکنش تودرتو را نمی‌پذیرد.
+ */
+let txDepth = 0;
+
 export function tx(fn) {
+  if (txDepth > 0) {
+    txDepth += 1;
+    try { return fn(); } finally { txDepth -= 1; }
+  }
   db.exec('BEGIN');
+  txDepth = 1;
   try {
     const out = fn();
     db.exec('COMMIT');
     return out;
   } catch (e) {
-    db.exec('ROLLBACK');
+    try { db.exec('ROLLBACK'); } catch { /* تراکنش از پیش بسته شده */ }
     throw e;
+  } finally {
+    txDepth = 0;
   }
 }

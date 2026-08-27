@@ -9,6 +9,7 @@ import { existsSync } from 'node:fs';
 import { join, extname, normalize as pathNormalize, sep } from 'node:path';
 import { db, getSetting, setSetting, ROOT, DATA_DIR, BACKUP_DIR, DB_PATH } from './db.js';
 import * as repo from './repo.js';
+import { scanFolder, probeDurations, hasFfprobe } from './scan.js';
 import { todayJalali, nowJalaliDateTime } from '../public/lib/jalali.js';
 
 const PORT = Number(process.env.PORT || 7788);
@@ -57,6 +58,12 @@ async function readBody(req, limitBytes = 64 * 1024 * 1024) {
 }
 
 const actorOf = (req) => req.headers['x-archive-user'] ? decodeURIComponent(req.headers['x-archive-user']) : null;
+
+/** آیا درخواست از روی همین رایانه آمده است؟ */
+function isLoopback(req) {
+  const addr = req.socket?.remoteAddress || '';
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1' || addr.startsWith('127.');
+}
 
 /** تبدیل پارامترهای آدرس به شیء ساده */
 function queryOf(url) {
@@ -131,6 +138,10 @@ async function handleApi(req, res, url) {
       }
       if (method === 'GET') return sendJson(res, repo.listItems(q));
       if (method === 'POST' && seg[1] === 'bulk') return sendJson(res, bulkUpdate(body, actor));
+      if (method === 'POST' && seg[1] === 'batch') {
+        const created = repo.createBatch(body, actor);
+        return sendJson(res, { ok: true, created: created.length, items: created }, 201);
+      }
       if (method === 'POST') return sendJson(res, repo.saveItem(body, actor), 201);
       if (method === 'PUT' && id) return sendJson(res, repo.saveItem({ ...body, id }, actor));
       if (method === 'POST' && seg[2] === 'restore') return sendJson(res, repo.restoreItem(id, actor));
@@ -216,6 +227,45 @@ async function handleApi(req, res, url) {
         return sendJson(res, { ok: true });
       }
       break;
+    }
+
+    /* ------------------------------------------------------- پویش پوشه */
+    case 'scan': {
+      // خواندن پوشه‌های رایانه تنها از روی همین دستگاه مجاز است.
+      // اگر برنامه با HOST=0.0.0.0 روی شبکه باز شده باشد، این مسیر بسته می‌ماند.
+      if (!isLoopback(req)) {
+        return sendJson(res, {
+          error: 'پویش پوشه فقط از روی همین رایانه امکان‌پذیر است، نه از راه شبکه.',
+        }, 403);
+      }
+      if (seg[1] === 'tools') return sendJson(res, { ffprobe: await hasFfprobe() });
+      if (method !== 'POST') break;
+
+      const result = await scanFolder({
+        path: body.path,
+        recursive: !!body.recursive,
+        kinds: Array.isArray(body.kinds) && body.kinds.length ? body.kinds : null,
+      });
+
+      // مشخص کردن فایل‌هایی که پیش‌تر ثبت شده‌اند تا دوباره ثبت نشوند
+      const registered = repo.findRegisteredFiles(body.drive_id, result.files);
+      for (const f of result.files) {
+        f.registered = registered[`${f.folder_path}|${f.file_name}`] || null;
+      }
+
+      // خواندن مدت زمان — تنها اگر کاربر خواسته باشد و ابزار موجود باشد
+      let durations = null;
+      if (body.with_duration) {
+        durations = await probeDurations(result.files.map((f) => f.full_path));
+        if (durations) for (const f of result.files) f.duration_sec = durations[f.full_path] ?? null;
+      }
+
+      return sendJson(res, {
+        ...result,
+        ffprobe: await hasFfprobe(),
+        duration_read: !!durations,
+        registered_count: Object.keys(registered).length,
+      });
     }
 
     /* ---------------------------------------------------- خروجی و پشتیبان */
