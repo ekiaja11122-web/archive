@@ -1,0 +1,18 @@
+{
+  "name": "dastgheib-archive",
+  "version": "1.0.0",
+  "description": "نرم‌افزار جامع مدیریت آرشیو صوتی و تصویری",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node --no-warnings server/index.js",
+    "dev": "node --no-warnings --watch server/index.js",
+    "backup": "node --no-warnings server/backup.js",
+    "demo": "node --no-warnings server/demo.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "license": "MIT",
+  "private": true
+}

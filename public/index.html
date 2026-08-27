@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>آرشیو</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗄️</text></svg>">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar__brand">
+        <h1 class="sidebar__title" id="brand-title">آرشیو</h1>
+        <div class="sidebar__subtitle">مدیریت آرشیو صوتی و تصویری</div>
+      </div>
+      <nav class="sidebar__nav" id="sidebar-nav"></nav>
+      <div class="sidebar__footer">
+        <span>امروز:</span>
+        <span class="num" id="today-label">—</span>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="btn btn--ghost btn--icon sidebar__toggle" id="sidebar-toggle" title="منو">☰</button>
+
+        <div class="search-box">
+          <span class="search-box__icon">🔍</span>
+          <input id="global-search" type="search" autocomplete="off"
+                 placeholder="جست‌وجو در کل آرشیو — عنوان، موضوع، نام فایل، هارد، برچسب…">
+          <span class="search-box__hint">Ctrl + K</span>
+        </div>
+
+        <button class="btn btn--primary" id="new-item-btn">＋ ثبت رکورد</button>
+        <button class="btn btn--ghost btn--icon" id="theme-btn" title="روشن / تاریک">🌙</button>
+      </header>
+
+      <main class="content" id="view-root">
+        <div class="loading"><div class="spinner"></div><span>در حال آماده‌سازی…</span></div>
+      </main>
+    </div>
+  </div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
