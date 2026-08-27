@@ -8,7 +8,7 @@
     "setup": "node tools/setup.mjs",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:init": "wrangler d1 execute dastyar-db --remote --file=./schema.sql",
+    "db:init": "wrangler d1 execute dastyar-db --remote --file=./schema.sql -y",
     "db:init:local": "wrangler d1 execute dastyar-db --local --file=./schema.sql",
     "icons": "node tools/make-icons.mjs",
     "test": "node tools/smoke-test.mjs"

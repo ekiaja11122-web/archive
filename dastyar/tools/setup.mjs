@@ -9,7 +9,7 @@
  *   ۴. جدول‌ها را می‌سازد
  *   ۵. برنامه را منتشر می‌کند و نشانی نهایی را نشان می‌دهد
  */
-import { execSync, spawnSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -19,7 +19,25 @@ const CONFIG = join(ROOT, 'wrangler.toml');
 const DB_NAME = 'dastyar-db';
 
 const say = (msg) => console.log('\n▸ ' + msg);
-const run = (cmd, opts = {}) => execSync(cmd, { cwd: ROOT, encoding: 'utf8', stdio: ['inherit', 'pipe', 'pipe'], ...opts });
+
+/**
+ * اجرای یک فرمان و برگرداندن خروجی آن.
+ * از execSync استفاده می‌کنیم چون روی ویندوز هم `npx` را درست پیدا می‌کند
+ * (spawnSync در ویندوز فایل‌های .cmd را بدون shell اجرا نمی‌کند).
+ */
+function run(cmd, opts = {}) {
+  return execSync(cmd, { cwd: ROOT, encoding: 'utf8', stdio: ['inherit', 'pipe', 'pipe'], ...opts });
+}
+
+/** اجرای فرمان بدون پرتاب خطا؛ خروجی و وضعیت را برمی‌گرداند */
+function tryRun(cmd) {
+  try {
+    return { ok: true, out: run(cmd) || '' };
+  } catch (e) {
+    const out = [e.stdout, e.stderr, e.message].filter(Boolean).join('\n').trim();
+    return { ok: false, out: out || 'اجرای فرمان ناموفق بود: ' + cmd };
+  }
+}
 
 function die(message, hint) {
   console.error('\n✖ ' + message);
@@ -29,13 +47,12 @@ function die(message, hint) {
 
 /* ------------------------------------------------------ ۱) بررسی ورود */
 say('بررسی حساب کلادفلر…');
-try {
-  const who = run('npx wrangler whoami');
-  const email = (who.match(/[\w.+-]+@[\w.-]+/) || [])[0];
-  console.log('  وارد شده‌اید' + (email ? ` با حساب ${email}` : ''));
-} catch {
+const who = tryRun('npx wrangler whoami');
+if (!who.ok || /not authenticated|You are not logged in/i.test(who.out)) {
   die('هنوز وارد حساب کلادفلر نشده‌اید.', 'اول این دستور را اجرا کنید:  npx wrangler login');
 }
+const email = (who.out.match(/[\w.+-]+@[\w.-]+/) || [])[0];
+console.log('  وارد شده‌اید' + (email ? ` با حساب ${email}` : ''));
 
 /* --------------------------------------------- ۲) ساخت پایگاه داده D1 */
 let config = readFileSync(CONFIG, 'utf8');
@@ -43,16 +60,24 @@ let dbId = (config.match(/database_id\s*=\s*"([^"]+)"/) || [])[1];
 
 if (!dbId || dbId.startsWith('PUT-YOUR')) {
   say('ساخت پایگاه دادهٔ D1…');
-  let out = '';
-  try {
-    out = run(`npx wrangler d1 create ${DB_NAME}`);
-  } catch (e) {
-    out = String(e.stdout || '') + String(e.stderr || '');
-    if (!/already exists/i.test(out)) die('ساخت پایگاه داده ناموفق بود:\n' + out);
+  let created = tryRun(`npx wrangler d1 create ${DB_NAME}`);
+  if (!created.ok) {
+    if (!/already exists/i.test(created.out)) die('ساخت پایگاه داده ناموفق بود:\n' + created.out);
     say('پایگاه داده از قبل وجود دارد؛ شناسه‌اش را می‌گیریم…');
-    out = run('npx wrangler d1 list --json');
+    created = tryRun('npx wrangler d1 list --json');
+    if (!created.ok) die('گرفتن فهرست پایگاه‌های داده ناموفق بود:\n' + created.out);
   }
-  const id = (out.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/) || [])[0];
+  const out = created.out;
+  let id = null;
+  // اگر خروجی JSON فهرست پایگاه‌ها بود، دقیقاً همان پایگاه دادهٔ خودمان را پیدا کن
+  const jsonStart = out.indexOf('[');
+  if (jsonStart >= 0) {
+    try {
+      const list = JSON.parse(out.slice(jsonStart, out.lastIndexOf(']') + 1));
+      id = (list.find((d) => d.name === DB_NAME) || {}).uuid || null;
+    } catch { /* خروجی JSON نبود */ }
+  }
+  if (!id) id = (out.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/) || [])[0];
   if (!id) die('شناسهٔ پایگاه داده پیدا نشد.', 'خروجی:\n' + out);
   dbId = id;
   config = config.replace(/database_id\s*=\s*"[^"]*"/, `database_id = "${dbId}"`);
@@ -64,16 +89,16 @@ if (!dbId || dbId.startsWith('PUT-YOUR')) {
 
 /* ------------------------------------------------------ ۳) ساخت جدول‌ها */
 say('ساخت جدول‌ها…');
-const schema = spawnSync('npx', ['wrangler', 'd1', 'execute', DB_NAME, '--remote', '--file=./schema.sql', '-y'],
-  { cwd: ROOT, encoding: 'utf8' });
-if (schema.status !== 0) die('ساخت جدول‌ها ناموفق بود:\n' + (schema.stderr || schema.stdout));
+const schema = tryRun(`npx wrangler d1 execute ${DB_NAME} --remote --file=./schema.sql -y`);
+if (!schema.ok) die('ساخت جدول‌ها ناموفق بود:\n' + schema.out);
 console.log('  جدول‌ها آماده‌اند');
 
 /* ------------------------------------------------------------ ۴) انتشار */
-say('انتشار برنامه روی کلادفلر…');
-const deploy = spawnSync('npx', ['wrangler', 'deploy'], { cwd: ROOT, encoding: 'utf8' });
-const output = (deploy.stdout || '') + (deploy.stderr || '');
-if (deploy.status !== 0) die('انتشار ناموفق بود:\n' + output);
+say('انتشار برنامه روی کلادفلر… (کمی طول می‌کشد)');
+const deploy = tryRun('npx wrangler deploy');
+const output = deploy.out;
+if (!deploy.ok) die('انتشار ناموفق بود:\n' + output);
+console.log(output.trim());
 
 const url = (output.match(/https:\/\/[^\s]+\.workers\.dev/) || [])[0];
 console.log('\n══════════════════════════════════════════════');
