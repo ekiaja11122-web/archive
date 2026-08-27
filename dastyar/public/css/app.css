@@ -3,6 +3,19 @@
    طراحی موبایل‌اول، راست‌به‌چپ، با پشتیبانی از حالت روشن و تاریک
    ================================================================== */
 
+/* --------------------------------------------------------- فونت وزیرمتن
+   فونت همراه خود برنامه ارسال می‌شود (نه از سرور بیرونی) تا همیشه و
+   همه‌جا بارگذاری شود. یک فایل «متغیر» است و همهٔ ضخامت‌ها را در بر دارد.
+   وزیرمتن ساختهٔ صابر راستی‌کردار — مجوز SIL OFL 1.1 (فایل fonts/OFL.txt)
+   -------------------------------------------------------------------- */
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/fonts/vazirmatn-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --bg: #f4f5f7;
   --surface: #ffffff;
@@ -49,7 +62,7 @@ html, body {
   margin: 0; padding: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: "Vazirmatn", "IRANSans", "Segoe UI", system-ui, -apple-system, "Noto Sans Arabic", Tahoma, sans-serif;
+  font-family: 'Vazirmatn', 'IRANSans', 'Segoe UI', system-ui, -apple-system, 'Noto Sans Arabic', Tahoma, sans-serif;
   font-size: 15px;
   line-height: 1.75;
   overscroll-behavior-y: none;
@@ -321,7 +334,8 @@ textarea.input { font-family: inherit; }
 }
 .kv-k { font-size: 12px; color: var(--text-dim); }
 .kv-v { font-weight: 600; word-break: break-all; direction: ltr; text-align: right; }
-.kv-shown { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; }
+/* تک‌فاصله برای رمزها (تشخیص صفر از حرف O)، با پشتیبان وزیرمتن برای ارقام فارسی */
+.kv-shown { font-family: ui-monospace, 'SFMono-Regular', Menlo, 'Vazirmatn', monospace; font-variant-numeric: tabular-nums; }
 .detail { display: flex; flex-direction: column; }
 .note-box { background: var(--surface-2); border-radius: 10px; padding: 10px; margin-top: 10px; white-space: pre-wrap; }
 

@@ -1,13 +1,14 @@
 /**
  * Service Worker — نمایش نوتیفیکیشن و کش سبک فایل‌های برنامه
  */
-const CACHE = 'dastyar-v1';
+const CACHE = 'dastyar-v2';
 const SHELL = [
   '/', '/index.html', '/css/app.css',
   '/js/app.js', '/js/core.js', '/js/crypto.js', '/js/components.js',
   '/js/views/today.js', '/js/views/tasks.js', '/js/views/vault.js',
   '/js/views/finance.js', '/js/views/more.js',
   '/lib/jalali.js', '/lib/dt.js', '/lib/recur.js',
+  '/fonts/vazirmatn-var.woff2',
   '/manifest.webmanifest',
 ];
 
