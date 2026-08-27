@@ -1,0 +1,28 @@
+# ------------------------------------------------------------------
+#  تنظیمات استقرار روی Cloudflare Workers
+#  فقط یک جای این فایل را باید پر کنید: database_id
+#  (اگر `npm run setup` را اجرا کنید، خودکار پر می‌شود)
+# ------------------------------------------------------------------
+
+name = "dastyar"
+main = "src/index.js"
+compatibility_date = "2025-05-01"
+
+# فایل‌های ظاهری برنامه (HTML/CSS/JS) مستقیم از لبهٔ شبکه سرو می‌شوند
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# پایگاه دادهٔ D1
+[[d1_databases]]
+binding = "DB"
+database_name = "dastyar-db"
+database_id = "PUT-YOUR-DATABASE-ID-HERE"
+
+# یادآوری‌ها: هر نیم‌ساعت یک‌بار بررسی می‌شود
+[triggers]
+crons = ["0,30 * * * *"]
+
+[vars]
+APP_NAME = "دستیار"

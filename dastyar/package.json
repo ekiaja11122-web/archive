@@ -1,0 +1,19 @@
+{
+  "name": "dastyar",
+  "version": "1.0.0",
+  "description": "دستیار شخصی: کارها و یادآوری‌ها، گاوصندوق اطلاعات، حساب‌وکتاب — روی کلادفلر",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node tools/setup.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute dastyar-db --remote --file=./schema.sql",
+    "db:init:local": "wrangler d1 execute dastyar-db --local --file=./schema.sql",
+    "icons": "node tools/make-icons.mjs",
+    "test": "node tools/smoke-test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.20.0"
+  }
+}

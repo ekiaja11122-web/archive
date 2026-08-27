@@ -1,0 +1,23 @@
+{
+  "name": "دستیار شخصی",
+  "short_name": "دستیار",
+  "description": "کارها و یادآوری‌ها، گاوصندوق اطلاعات، حساب و کتاب",
+  "lang": "fa",
+  "dir": "rtl",
+  "start_url": "/#/today",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "کارهای امروز", "url": "/#/today" },
+    { "name": "گاوصندوق", "url": "/#/vault" },
+    { "name": "حساب و کتاب", "url": "/#/finance" }
+  ]
+}
