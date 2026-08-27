@@ -7,9 +7,10 @@ import { spawn } from 'node:child_process';
 import { readFile, writeFile, readdir, stat as fstat, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, normalize as pathNormalize, sep } from 'node:path';
-import { db, getSetting, setSetting, ROOT, DATA_DIR, BACKUP_DIR, DB_PATH } from './db.js';
+import { db, getSetting, setSetting, checkpoint, ROOT, DATA_DIR, BACKUP_DIR, DB_PATH } from './db.js';
 import * as repo from './repo.js';
 import { scanFolder, probeDurations, hasFfprobe } from './scan.js';
+import { createBackup, listBackups, pruneBackups, verifyBackup, restoreBackup, buildPayload, stamp } from './backup.js';
 import { todayJalali, nowJalaliDateTime } from '../public/lib/jalali.js';
 
 const PORT = Number(process.env.PORT || 7788);
@@ -271,7 +272,7 @@ async function handleApi(req, res, url) {
     /* ---------------------------------------------------- خروجی و پشتیبان */
     case 'export': {
       if (seg[1] === 'json') {
-        const payload = JSON.stringify(repo.exportAll(), null, 2);
+        const payload = JSON.stringify(buildPayload(), null, 2);
         return sendText(res, payload, 'application/json; charset=utf-8', 200,
           { 'Content-Disposition': `attachment; filename="archive-backup-${stamp()}.json"` });
       }
@@ -283,16 +284,27 @@ async function handleApi(req, res, url) {
     }
 
     case 'import': {
+      if (seg[1] === 'verify' && method === 'POST') {
+        return sendJson(res, verifyBackup(body));
+      }
       if (method === 'POST') {
-        const result = repo.importAll(body, actor);
-        return sendJson(res, { ok: true, ...result });
+        try {
+          const result = await restoreBackup(body, actor);
+          return sendJson(res, result);
+        } catch (e) {
+          return sendJson(res, { error: e.message, verification: e.verification || null }, 400);
+        }
       }
       break;
     }
 
     case 'backup': {
       if (method === 'GET') return sendJson(res, await listBackups());
-      if (method === 'POST') return sendJson(res, await makeBackup(actor));
+      if (method === 'POST') {
+        const info = await createBackup({ actor });
+        await pruneBackups();
+        return sendJson(res, info);
+      }
       if (method === 'DELETE' && seg[1]) {
         const name = decodeURIComponent(seg[1]);
         if (!/^[\w.\-]+\.json$/.test(name)) return sendJson(res, { error: 'نام فایل نامعتبر' }, 400);
@@ -375,37 +387,6 @@ function bulkUpdate({ ids = [], patch = {}, action }, actor) {
 
 /* -------------------------------------------------------------- پشتیبان */
 
-const stamp = () => todayJalali().replace(/\//g, '-') + '_' + new Date().toISOString().slice(11, 16).replace(':', '');
-
-async function makeBackup(actor) {
-  const name = `backup-${stamp()}.json`;
-  const file = join(BACKUP_DIR, name);
-  await writeFile(file, JSON.stringify(repo.exportAll(), null, 2), 'utf8');
-  const info = await fstat(file);
-  repo.log('system', null, 'backup', `پشتیبان «${name}» ساخته شد`, actor);
-  await pruneBackups();
-  return { ok: true, name, size_kb: Math.round(info.size / 1024), at: nowJalaliDateTime() };
-}
-
-/** نگهداری حداکثر N پشتیبان خودکار */
-async function pruneBackups(keep = Number(getSetting('backup_keep', '30'))) {
-  const files = await listBackups();
-  for (const f of files.slice(keep)) {
-    try { await unlink(join(BACKUP_DIR, f.name)); } catch { /* نادیده */ }
-  }
-}
-
-async function listBackups() {
-  if (!existsSync(BACKUP_DIR)) return [];
-  const names = (await readdir(BACKUP_DIR)).filter((n) => n.endsWith('.json'));
-  const out = [];
-  for (const name of names) {
-    const s = await fstat(join(BACKUP_DIR, name));
-    out.push({ name, size_kb: Math.round(s.size / 1024), mtime: s.mtimeMs });
-  }
-  return out.sort((a, b) => b.mtime - a.mtime);
-}
-
 /* ------------------------------------------------------------- راه‌اندازی */
 
 const server = http.createServer(async (req, res) => {
@@ -428,7 +409,9 @@ repo.seedIfEmpty();
 // پشتیبان‌گیری خودکار روزانه (اگر فعال باشد)
 if (getSetting('auto_backup', '1') === '1') {
   const DAY = 24 * 60 * 60 * 1000;
-  setInterval(() => { makeBackup('سیستم').catch(() => {}); }, DAY).unref();
+  setInterval(() => {
+    createBackup({ actor: 'پشتیبان‌گیری خودکار' }).then(pruneBackups).catch(() => {});
+  }, DAY).unref();
 }
 
 server.listen(PORT, HOST, () => {
@@ -456,5 +439,10 @@ function openBrowser(url) {
 }
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, () => { try { db.close(); } catch { /* نادیده */ } process.exit(0); });
+  process.on(sig, () => {
+    // نوشته‌های معلق به فایل اصلی منتقل می‌شوند تا archive.db همیشه کامل باشد
+    try { checkpoint(); } catch { /* نادیده */ }
+    try { db.close(); } catch { /* نادیده */ }
+    process.exit(0);
+  });
 }

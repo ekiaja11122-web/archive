@@ -83,6 +83,7 @@ export const api = {
   deleteBackup: (name) => request('DELETE', `/backup/${encodeURIComponent(name)}`),
 
   importAll: (payload) => request('POST', '/import', payload),
+  verifyBackup: (payload) => request('POST', '/import/verify', payload),
   rebuildSearch: () => request('POST', '/maintenance/rebuild-search', {}),
   vacuum: () => request('POST', '/maintenance/vacuum', {}),
   info: () => request('GET', '/maintenance/info'),

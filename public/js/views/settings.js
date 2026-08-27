@@ -224,17 +224,30 @@ async function renderBackup(host) {
 /* ========================================================== خروجی و ورودی */
 
 function renderTransfer(host) {
+  /* ---------------------------------------- راهنمای انتقال به رایانهٔ دیگر */
+  host.append(el('div', { class: 'card mb' },
+    el('div', { class: 'card__head' }, el('h3', { class: 'card__title' }, '💻 بردن آرشیو به رایانهٔ دیگر')),
+    el('div', { class: 'card__body stack' },
+      el('div', { class: 'muted small' },
+        'برای اینکه همین آرشیو را روی رایانهٔ دیگری داشته باشید، سه گام ساده لازم است:'),
+      step('۱', 'یک پشتیبان کامل بگیرید',
+        'دکمهٔ زیر یک فایل می‌سازد که همهٔ اطلاعات آرشیو در آن است. آن را روی فلش یا فضای ابری بگذارید.',
+        el('button', {
+          class: 'btn btn--primary btn--sm',
+          onclick: () => { window.location.href = '/api/export/json'; toast('فایل پشتیبان در حال دانلود است…', 'info'); },
+        }, '⤓ دانلود پشتیبان کامل')),
+      step('۲', 'نرم‌افزار را روی رایانهٔ دوم راه بیندازید',
+        'همین پوشهٔ برنامه را کپی کنید (یا دوباره از مخزن بگیرید) و Node.js را نصب کنید. یک‌بار برنامه را اجرا کنید تا آماده شود.'),
+      step('۳', 'پشتیبان را روی رایانهٔ دوم بازیابی کنید',
+        'در همین صفحه، بخش «بازیابی از فایل پشتیبان» را باز کنید و فایلی را که آورده‌اید انتخاب کنید.'),
+      el('div', { class: 'muted small', style: { borderTop: '1px solid var(--surface-line)', paddingTop: '10px' } },
+        'راه دوم: می‌توانید به‌جای فایل پشتیبان، کل پوشهٔ برنامه را کپی کنید. ' +
+        'در این حالت حتماً اول برنامه را ببندید، وگرنه ممکن است آخرین تغییرها هنوز روی فایل ننشسته باشند.'))));
+
+  /* -------------------------------------------------------------- خروجی */
   host.append(el('div', { class: 'card mb' },
     el('div', { class: 'card__head' }, el('h3', { class: 'card__title' }, '⤓ گرفتن خروجی')),
     el('div', { class: 'card__body stack' },
-      el('div', { class: 'switch-row' },
-        el('div', {},
-          el('div', {}, 'فایل اکسل (CSV) از فهرست رکوردها'),
-          el('div', { class: 'muted small' }, 'برای مشاهده در اکسل یا اشتراک‌گذاری با دیگران')),
-        el('button', {
-          class: 'btn btn--sm',
-          onclick: () => { window.location.href = '/api/export/csv'; toast('در حال دانلود…', 'info'); },
-        }, 'دانلود')),
       el('div', { class: 'switch-row' },
         el('div', {},
           el('div', {}, 'پشتیبان کامل (JSON)'),
@@ -242,41 +255,113 @@ function renderTransfer(host) {
         el('button', {
           class: 'btn btn--sm',
           onclick: () => { window.location.href = '/api/export/json'; toast('در حال دانلود…', 'info'); },
+        }, 'دانلود')),
+      el('div', { class: 'switch-row' },
+        el('div', {},
+          el('div', {}, 'فایل اکسل (CSV) از فهرست رکوردها'),
+          el('div', { class: 'muted small' }, 'برای مشاهده در اکسل یا اشتراک‌گذاری — برای بازیابی به کار نمی‌آید')),
+        el('button', {
+          class: 'btn btn--sm',
+          onclick: () => { window.location.href = '/api/export/csv'; toast('در حال دانلود…', 'info'); },
         }, 'دانلود')))));
 
-  const importCard = el('div', { class: 'card' },
-    el('div', { class: 'card__head' }, el('h3', { class: 'card__title' }, '⤒ بازیابی از فایل پشتیبان')));
+  /* ------------------------------------------------------------ بازیابی */
   const fileInput = el('input', { type: 'file', accept: '.json', class: 'input' });
-  importCard.append(el('div', { class: 'card__body stack' },
-    el('div', { style: { color: 'var(--danger)' } },
-      '⚠️ هشدار: با بازیابی، همهٔ اطلاعات فعلی پاک و با محتوای فایل پشتیبان جایگزین می‌شود.'),
-    el('div', { class: 'muted small' }, 'پیش از بازیابی، یک پشتیبان از وضعیت فعلی بگیرید.'),
-    fileInput,
-    el('button', {
-      class: 'btn btn--danger',
-      onclick: async () => {
-        const file = fileInput.files?.[0];
-        if (!file) return toast('ابتدا فایل پشتیبان را انتخاب کنید', 'warn');
-        let payload;
-        try { payload = JSON.parse(await file.text()); }
-        catch { return toast('فایل انتخاب‌شده یک پشتیبان معتبر نیست', 'error'); }
-        const counts = payload?.meta?.counts;
-        const ok = await confirmDialog({
-          title: 'بازیابی اطلاعات',
-          message: `همهٔ اطلاعات فعلی پاک می‌شود و این پشتیبان جایگزین آن می‌گردد.<br>` +
-            (counts ? `<span class="muted small">محتوای فایل: ${fa(counts.items)} رکورد، ${fa(counts.drives)} هارد، ${fa(counts.copies)} نسخه</span>` : ''),
-          confirmText: 'بله، بازیابی کن', danger: true,
-        });
-        if (!ok) return;
-        try {
-          const r = await api.importAll(payload);
-          await refreshReference();
-          toast(`${fa(r.items)} رکورد بازیابی شد`);
-          go('dashboard');
-        } catch (e) { toast(e.message, 'error'); }
-      },
-    }, 'بازیابی از این فایل')));
-  host.append(importCard);
+  const reportBox = el('div', { class: 'stack', hidden: true });
+  const restoreBtn = el('button', { class: 'btn btn--danger', disabled: true }, 'بازیابی از این فایل');
+  let checkedPayload = null;
+
+  fileInput.addEventListener('change', async () => {
+    reportBox.hidden = true;
+    reportBox.innerHTML = '';
+    restoreBtn.disabled = true;
+    checkedPayload = null;
+
+    const file = fileInput.files?.[0];
+    if (!file) return;
+
+    let payload;
+    try { payload = JSON.parse(await file.text()); }
+    catch {
+      reportBox.hidden = false;
+      reportBox.append(el('div', { style: { color: 'var(--danger)' } },
+        '✗ این فایل یک پشتیبان معتبر نیست (محتوایش خوانده نشد).'));
+      return;
+    }
+
+    let check;
+    try { check = await api.verifyBackup(payload); }
+    catch (e) { return toast(e.message, 'error'); }
+
+    reportBox.hidden = false;
+    if (check.ok) {
+      reportBox.append(el('div', { class: 'row' },
+        el('span', { class: 'badge badge--ok' }, '✓ فایل سالم است'),
+        check.exported_at ? el('span', { class: 'muted small' }, `ساخته‌شده در ${fa(check.exported_at)}`) : null));
+      const c = check.counts;
+      reportBox.append(el('div', { class: 'small' },
+        `محتوا: ${fa(c.items)} رکورد، ${fa(c.drives)} هارد، ${fa(c.copies)} نسخه، ` +
+        `${fa(c.categories)} دسته، ${fa(c.speakers)} شخص، ${fa(c.tags)} برچسب`));
+      checkedPayload = payload;
+      restoreBtn.disabled = false;
+    } else {
+      reportBox.append(el('div', { class: 'row' }, el('span', { class: 'badge badge--danger' }, '✗ فایل سالم نیست')));
+      for (const err of check.errors) {
+        reportBox.append(el('div', { class: 'small', style: { color: 'var(--danger)' } }, '• ' + err));
+      }
+    }
+    for (const w of (check.warnings || [])) {
+      reportBox.append(el('div', { class: 'small', style: { color: 'var(--warn)' } }, '! ' + w));
+    }
+  });
+
+  restoreBtn.addEventListener('click', async () => {
+    if (!checkedPayload) return;
+    const ok = await confirmDialog({
+      title: 'بازیابی اطلاعات',
+      message: 'همهٔ اطلاعات فعلی پاک می‌شود و این پشتیبان جایگزین آن می‌گردد.<br>' +
+        '<span class="muted small">پیش از پاک شدن، خودکار یک پشتیبان از وضعیت فعلی گرفته می‌شود تا اگر اشتباه شد، راه برگشت داشته باشید.</span>',
+      confirmText: 'بله، بازیابی کن', danger: true,
+    });
+    if (!ok) return;
+    restoreBtn.disabled = true;
+    try {
+      const r = await api.importAll(checkedPayload);
+      await refreshReference();
+      toast(`${fa(r.items)} رکورد بازیابی شد`);
+      if (r.safety_backup) {
+        toast(`از وضعیت پیشین پشتیبان گرفته شد: ${r.safety_backup}`, 'info', 6000);
+      }
+      go('dashboard');
+    } catch (e) {
+      toast(e.message, 'error');
+      restoreBtn.disabled = false;
+    }
+  });
+
+  host.append(el('div', { class: 'card' },
+    el('div', { class: 'card__head' }, el('h3', { class: 'card__title' }, '⤒ بازیابی از فایل پشتیبان')),
+    el('div', { class: 'card__body stack' },
+      el('div', { style: { color: 'var(--danger)' } },
+        '⚠️ با بازیابی، همهٔ اطلاعات فعلی پاک و با محتوای فایل پشتیبان جایگزین می‌شود.'),
+      el('div', { class: 'muted small' },
+        'فایل پیش از بازیابی بررسی می‌شود و اگر ناقص یا خراب باشد، اجازهٔ بازیابی داده نمی‌شود.'),
+      fileInput,
+      reportBox,
+      restoreBtn)));
+}
+
+/** یک گام از راهنمای انتقال */
+function step(no, title, text, action) {
+  return el('div', { class: 'row', style: { alignItems: 'flex-start', gap: '12px' } },
+    el('span', {
+      class: 'badge badge--brand',
+      style: { width: '26px', height: '26px', justifyContent: 'center', flex: 'none', fontSize: '13px' },
+    }, no),
+    el('div', { style: { flex: '1', minWidth: '0' } },
+      el('div', { class: 'strong' }, title),
+      el('div', { class: 'muted small' }, text),
+      action ? el('div', { style: { marginTop: '7px' } }, action) : null));
 }
 
 /* ============================================================== رویدادها */

@@ -201,6 +201,25 @@ export function ensureColumn(table, column, definition) {
   }
 }
 
+/* ------------------------------------------------------------- نگهداری WAL */
+
+/**
+ * نوشته‌های معلق در فایل WAL را داخل خود پایگاه داده می‌نویسد.
+ *
+ * چرا لازم است: در حالت WAL، تغییرات تازه در فایل archive.db-wal می‌مانند و
+ * هنوز به archive.db منتقل نشده‌اند. اگر کاربر فقط archive.db را روی رایانهٔ
+ * دیگری ببرد، آخرین تغییرهایش را از دست می‌دهد. پیش از هر پشتیبان‌گیری و
+ * هنگام بستن برنامه این تابع صدا زده می‌شود.
+ */
+export function checkpoint() {
+  try {
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /* --------------------------------------------------------------- helpers */
 export function getSetting(key, fallback = null) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
