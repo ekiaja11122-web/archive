@@ -55,34 +55,48 @@ const email = (who.out.match(/[\w.+-]+@[\w.-]+/) || [])[0];
 console.log('  وارد شده‌اید' + (email ? ` با حساب ${email}` : ''));
 
 /* --------------------------------------------- ۲) ساخت پایگاه داده D1 */
-let config = readFileSync(CONFIG, 'utf8');
-let dbId = (config.match(/database_id\s*=\s*"([^"]+)"/) || [])[1];
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-if (!dbId || dbId.startsWith('PUT-YOUR')) {
-  say('ساخت پایگاه دادهٔ D1…');
-  let created = tryRun(`npx wrangler d1 create ${DB_NAME}`);
-  if (!created.ok) {
-    if (!/already exists/i.test(created.out)) die('ساخت پایگاه داده ناموفق بود:\n' + created.out);
-    say('پایگاه داده از قبل وجود دارد؛ شناسه‌اش را می‌گیریم…');
-    created = tryRun('npx wrangler d1 list --json');
-    if (!created.ok) die('گرفتن فهرست پایگاه‌های داده ناموفق بود:\n' + created.out);
-  }
-  const out = created.out;
-  let id = null;
-  // اگر خروجی JSON فهرست پایگاه‌ها بود، دقیقاً همان پایگاه دادهٔ خودمان را پیدا کن
+/** شناسهٔ پایگاه داده را از خروجی wrangler بیرون می‌کشد */
+function findDatabaseId(out) {
   const jsonStart = out.indexOf('[');
   if (jsonStart >= 0) {
     try {
       const list = JSON.parse(out.slice(jsonStart, out.lastIndexOf(']') + 1));
-      id = (list.find((d) => d.name === DB_NAME) || {}).uuid || null;
+      const hit = list.find((d) => d.name === DB_NAME);
+      if (hit?.uuid) return hit.uuid;
     } catch { /* خروجی JSON نبود */ }
   }
-  if (!id) id = (out.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/) || [])[0];
-  if (!id) die('شناسهٔ پایگاه داده پیدا نشد.', 'خروجی:\n' + out);
-  dbId = id;
+  // در غیر این صورت، اولین شناسهٔ شبیه uuid در متن خروجی
+  return (out.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i) || [])[0] || null;
+}
+
+let config = readFileSync(CONFIG, 'utf8');
+let dbId = (config.match(/database_id\s*=\s*"([^"]+)"/) || [])[1];
+
+// شناسه ممکن است جاافتاده، نمونهٔ نمایشی، یا بعد از git pull پاک شده باشد
+if (!dbId || !UUID.test(dbId)) {
+  say('پیدا کردن پایگاه دادهٔ D1…');
+
+  // اول ببین از قبل ساخته شده یا نه
+  const list = tryRun('npx wrangler d1 list --json');
+  if (!list.ok) die('گرفتن فهرست پایگاه‌های داده ناموفق بود:\n' + list.out);
+  dbId = findDatabaseId(list.out);
+
+  if (dbId) {
+    console.log('  پایگاه داده از قبل در حساب شما وجود دارد');
+  } else {
+    say('ساخت پایگاه دادهٔ D1…');
+    const created = tryRun(`npx wrangler d1 create ${DB_NAME}`);
+    if (!created.ok) die('ساخت پایگاه داده ناموفق بود:\n' + created.out);
+    dbId = findDatabaseId(created.out);
+    if (!dbId) die('شناسهٔ پایگاه داده پیدا نشد.', 'خروجی:\n' + created.out);
+  }
+
   config = config.replace(/database_id\s*=\s*"[^"]*"/, `database_id = "${dbId}"`);
   writeFileSync(CONFIG, config);
-  console.log('  شناسه ثبت شد: ' + dbId);
+  console.log('  شناسه در wrangler.toml ثبت شد: ' + dbId);
+  console.log('  (این خط را در گیت ثبت کنید تا با git pull پاک نشود)');
 } else {
   console.log('  پایگاه داده از قبل تنظیم شده است: ' + dbId);
 }
