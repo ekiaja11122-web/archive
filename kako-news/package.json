@@ -13,10 +13,17 @@
     "kako": "node --env-file-if-exists=.env --experimental-strip-types src/cli/index.ts",
     "migrate": "npm run kako -- migrate",
     "db:status": "npm run kako -- db:status",
-    "config:check": "npm run kako -- config:check"
+    "config:check": "npm run kako -- config:check",
+    "sources:sync": "npm run kako -- sources:sync",
+    "sources:list": "npm run kako -- sources:list",
+    "collect": "npm run kako -- collect",
+    "worker": "npm run kako -- worker",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
+    "cheerio": "^1.2.0",
     "pg": "^8.13.1",
+    "rss-parser": "^3.13.0",
     "yaml": "^2.6.1",
     "zod": "^3.24.1"
   },

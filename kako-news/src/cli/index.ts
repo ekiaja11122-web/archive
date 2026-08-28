@@ -4,15 +4,26 @@
  *
  *   npm run kako -- <command> [options]
  *
- * فرمان‌های موجود در این مایل‌استون:
- *   migrate       اعمال مهاجرت‌های دیتابیس
- *   db:status     نمایش وضعیت اتصال و مهاجرت‌ها
- *   config:check  اعتبارسنجی .env و config/app.yaml بدون اجرای کاری
+ * فرمان‌ها:
+ *   migrate        اعمال مهاجرت‌های دیتابیس
+ *   db:status      نمایش وضعیت اتصال و مهاجرت‌ها
+ *   config:check   اعتبارسنجی .env و فایل‌های کانفیگ بدون اجرای کاری
+ *   sources:sync   همگام‌سازی config/sources.yaml با دیتابیس
+ *   sources:list   نمایش منابع و وضعیت سلامتشان
+ *   collect        اجرای یک دور جمع‌آوری (اختیاری: --source=<slug> --force)
+ *   worker         اجرای مداوم زمان‌بند تا زمان توقف دستی
  */
 import { env } from '../config/env.ts';
 import { loadAppConfig } from '../config/app-config.ts';
+import { loadSourcesConfig } from '../config/sources-config.ts';
 import { runMigrations, migrationStatus } from '../db/migrate.ts';
 import { ping, closePool } from '../db/pool.ts';
+import { syncSources, listSources } from '../db/repositories/sources.ts';
+import { countByStatus } from '../db/repositories/raw-articles.ts';
+import { runCollection } from '../pipeline/collect.ts';
+import { runSchedulerUntilSignal } from '../pipeline/scheduler.ts';
+import { supportedTypes } from '../collectors/registry.ts';
+import { formatTehran } from '../lib/date.ts';
 import { createLogger } from '../lib/logger.ts';
 import { errorMessage } from '../lib/errors.ts';
 
@@ -70,6 +81,13 @@ const COMMANDS: Record<string, { describe: string; run: () => Promise<number> }>
         scheduler: app.scheduler.enabled ? 'فعال' : 'غیرفعال',
       });
 
+      const sources = loadSourcesConfig();
+      logger.info('sources.yaml سالم است', {
+        total: sources.length,
+        enabled: sources.filter((s) => s.enabled).length,
+        types: supportedTypes().join('/'),
+      });
+
       const optional: [string, boolean][] = [
         ['OpenAI (بازنویسی)', Boolean(e.OPENAI_API_KEY)],
         ['تلگرام (انتشار در کانال)', Boolean(e.TELEGRAM_BOT_TOKEN && e.TELEGRAM_CHANNEL_ID)],
@@ -82,7 +100,101 @@ const COMMANDS: Record<string, { describe: string; run: () => Promise<number> }>
       return 0;
     },
   },
+
+  'sources:sync': {
+    describe: 'همگام‌سازی config/sources.yaml با دیتابیس',
+    run: async () => {
+      const sources = loadSourcesConfig();
+      const summary = await syncSources(sources);
+      logger.info('منابع همگام شدند', {
+        new: summary.created,
+        updated: summary.updated,
+        disabled: summary.disabled.length,
+      });
+      if (summary.disabled.length > 0) {
+        process.stdout.write(
+          `  ⚠ این منابع دیگر در فایل نیستند و غیرفعال شدند: ${summary.disabled.join('، ')}\n`,
+        );
+      }
+      return 0;
+    },
+  },
+
+  'sources:list': {
+    describe: 'نمایش منابع و وضعیت سلامت هرکدام',
+    run: async () => {
+      const rows = await listSources();
+      if (rows.length === 0) {
+        logger.warn('هیچ منبعی در دیتابیس نیست — اول npm run sources:sync را اجرا کنید');
+        return 0;
+      }
+      for (const row of rows) {
+        const state = !row.enabled ? '⏸ غیرفعال'
+          : row.last_status === 'error' ? '✗ خطا'
+          : row.last_status === 'ok' ? '✓ سالم'
+          : '· بررسی‌نشده';
+        process.stdout.write(
+          `  ${state}  ${row.slug.padEnd(18)} ${row.type.padEnd(7)} ` +
+          `هر ${row.poll_interval_seconds}ث  آخرین بررسی: ${formatTehran(row.last_polled_at)}\n`,
+        );
+        if (row.last_error) {
+          process.stdout.write(`      └ ${row.last_error.slice(0, 150)}\n`);
+        }
+      }
+      return 0;
+    },
+  },
+
+  collect: {
+    describe: 'اجرای یک دور جمع‌آوری  [--source=<slug>] [--force]',
+    run: async () => {
+      const only = flagValue('--source');
+      const force = hasFlag('--force');
+
+      const stats = await runCollection({ only, force });
+      if (stats.length === 0) {
+        logger.info('هیچ منبعی در نوبت بررسی نبود (برای اجرای فوری --force بزنید)');
+        return 0;
+      }
+
+      process.stdout.write('\n  نتیجهٔ جمع‌آوری:\n');
+      for (const s of stats) {
+        const mark = s.error ? '✗' : '✓';
+        process.stdout.write(
+          `  ${mark} ${s.slug.padEnd(18)} یافت‌شده: ${String(s.found).padStart(3)}  ` +
+          `تازه: ${String(s.inserted).padStart(3)}  تکراری: ${String(s.duplicates).padStart(3)}\n`,
+        );
+        if (s.error) process.stdout.write(`      └ خطا: ${s.error.slice(0, 150)}\n`);
+        for (const warning of s.warnings.slice(0, 3)) {
+          process.stdout.write(`      └ هشدار: ${warning.slice(0, 150)}\n`);
+        }
+      }
+
+      const counts = await countByStatus();
+      process.stdout.write(`\n  وضعیت خبرهای خام: ${JSON.stringify(counts)}\n\n`);
+      return stats.some((s) => s.error) ? 1 : 0;
+    },
+  },
+
+  worker: {
+    describe: 'اجرای مداوم زمان‌بند (Ctrl+C برای توقف)',
+    run: async () => {
+      await runSchedulerUntilSignal();
+      return 0;
+    },
+  },
 };
+
+function flagValue(name: string): string | undefined {
+  const prefixed = process.argv.find((a) => a.startsWith(`${name}=`));
+  if (prefixed) return prefixed.slice(name.length + 1);
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+}
+
+function hasFlag(name: string): boolean {
+  return process.argv.includes(name);
+}
 
 function redactUrl(url: string): string {
   try {

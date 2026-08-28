@@ -1,0 +1,119 @@
+# ============================================================
+#  فهرست منابع خبری کاکو نیوز
+#
+#  این فایل را به config/sources.yaml کپی کنید و منابع خودتان را
+#  اضافه کنید. برای اعمال تغییرات:  npm run sources:sync
+#
+#  پس از هر ویرایش، درستی فایل را بررسی کنید:  npm run sources:list
+# ============================================================
+
+# مقادیری که برای همهٔ منابع اعمال می‌شوند، مگر اینکه منبع خودش عوضش کند
+defaults:
+  # هر چند ثانیه یک‌بار منبع بررسی شود (۹۰۰ = هر ۱۵ دقیقه)
+  poll_interval_seconds: 900
+  fetch:
+    timeout_ms: 15000
+    # ربات خودش را صادقانه معرفی می‌کند؛ هویت مرورگر جعل نمی‌شود
+    user_agent: "KakoNewsBot/1.0 (+https://kakonews.ir)"
+    # حداکثر چند خبر در هر بار بررسی برداشته شود
+    max_items_per_run: 20
+    # فاصلهٔ بین درخواست‌ها به یک سایت (میلی‌ثانیه) — فشار نیاوردن به سرور منبع
+    request_delay_ms: 1000
+    retries: 2
+
+sources:
+  # ----------------------------------------------------------
+  # ۱) منبع تستی محلی — برای آزمایش پایپ‌لاین بدون اینترنت
+  #    داده‌اش را از فایل JSON داخل پروژه می‌خواند.
+  #    این را در سرویس واقعی enabled: false کنید.
+  # ----------------------------------------------------------
+  - slug: mock-local
+    name: "منبع تستی محلی"
+    type: mock
+    url: "fixtures/mock-source.json"
+    homepage: "https://example.test"
+    enabled: true
+    poll_interval_seconds: 60
+
+  # ----------------------------------------------------------
+  # ۲) نمونهٔ منبع RSS
+  #    اگر سایت منبع فید RSS دارد، همیشه همین را انتخاب کنید:
+  #    پایدارتر است و با تغییر قالب سایت خراب نمی‌شود.
+  # ----------------------------------------------------------
+  - slug: nemoone-rss
+    name: "نمونهٔ خبرگزاری (RSS)"
+    type: rss
+    url: "https://example.com/rss/fars"      # نشانی فید
+    homepage: "https://example.com"
+    enabled: false                            # با نشانی واقعی، true کنید                            # با نشانی واقعی، true کنید
+    poll_interval_seconds: 900
+
+    # فید RSS معمولاً فقط خلاصه دارد. با true، سیستم به صفحهٔ خود خبر
+    # می‌رود و متن کامل را برمی‌دارد.
+    fetch_full_content: true
+
+    # سلکتورهای صفحهٔ اختصاصی خبر (فقط وقتی fetch_full_content فعال است)
+    article:
+      body_selector: ".item-text, .news-body"       # بدنهٔ متن خبر
+      image_selector: "meta[property='og:image']"   # تصویر شاخص
+      image_attribute: "content"                    # از کدام صفت تصویر خوانده شود
+      # این‌ها پیش از استخراج متن حذف می‌شوند تا در متن خبر نیایند
+      remove_selectors:
+        - "script"
+        - "style"
+        - ".related-news"
+        - ".advertisement"
+        - "figure figcaption"
+
+  # ----------------------------------------------------------
+  # ۳) نمونهٔ منبع بدون RSS (اسکرِیپ صفحهٔ آرشیو)
+  #    اول از صفحهٔ فهرست، عنوان و لینک و خلاصه و تاریخ برداشته می‌شود،
+  #    بعد متن کامل هر خبر از صفحهٔ خودش.
+  # ----------------------------------------------------------
+  - slug: nemoone-scrape
+    name: "نمونهٔ سایت خبری (اسکرِیپ)"
+    type: scrape
+    url: "https://example.com/archive/shiraz"   # صفحهٔ فهرست یا آرشیو
+    homepage: "https://example.com"
+    enabled: false
+    poll_interval_seconds: 1200
+    fetch_full_content: true
+
+    # سلکتورهای صفحهٔ فهرست
+    list:
+      # هر آیتم خبر در فهرست (این سلکتور الزامی است)
+      item_selector: "ul.news-list > li"
+      # عنوان و لینک، نسبت به هر آیتم
+      title_selector: "h3 a"
+      link_selector: "h3 a"
+      link_attribute: "href"
+      summary_selector: "p.summary"
+      date_selector: "time"
+      date_attribute: "datetime"     # اگر تاریخ در صفت است؛ نبود، از متن خوانده می‌شود
+      image_selector: "img"
+      image_attribute: "src"
+
+    # سلکتورهای صفحهٔ اختصاصی خبر
+    article:
+      title_selector: "h1.title"
+      body_selector: "div.article-body"
+      image_selector: "meta[property='og:image']"
+      image_attribute: "content"
+      date_selector: "meta[property='article:published_time']"
+      date_attribute: "content"
+      remove_selectors:
+        - "script"
+        - "style"
+        - ".related"
+        - ".tags"
+
+# ============================================================
+#  راهنمای پیدا کردن سلکتورها
+#  ۱. صفحهٔ منبع را در مرورگر باز کنید.
+#  ۲. روی عنوان خبر راست‌کلیک ← Inspect.
+#  ۳. روی المان راست‌کلیک ← Copy ← Copy selector.
+#  ۴. سلکتور را ساده کنید (کلاس‌های تصادفی و شماره‌ها را بردارید).
+#
+#  نکته: هر چه سلکتور ساده‌تر باشد، با تغییر قالب سایت دیرتر خراب می‌شود.
+#  اگر منبعی خطا داد، در پنل مدیریت زیر «سلامت منابع» دیده می‌شود.
+# ============================================================
