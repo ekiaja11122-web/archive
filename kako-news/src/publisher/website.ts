@@ -188,6 +188,7 @@ async function publishOne(
   dryRun: boolean,
   stats: PublishStats,
 ): Promise<void> {
+  const app = loadAppConfig();
   const article = await findArticle(publication.article_id);
 
   if (!article) {
@@ -257,13 +258,24 @@ async function publishOne(
 
     // خبر به وضعیت تأییدشده برمی‌گردد تا اجرای بعدی دوباره تلاش کند
     await setArticleStatus(article.id, 'approved');
-    await markPublicationFailed(publication.id, message);
+    const outcome = await markPublicationFailed(publication.id, message, {
+      permanent,
+      maxAttempts: app.publishing.max_attempts,
+      backoffSeconds: app.publishing.retry_backoff_seconds,
+    });
 
+    // پیام لاگ باید همان چیزی را بگوید که واقعاً اتفاق افتاده
     logger.error(
-      permanent
-        ? 'انتشار در سایت ناموفق بود (مشکل تنظیمات — تا رفع آن تکرار نکنید)'
-        : 'انتشار در سایت ناموفق بود؛ در اجرای بعدی دوباره تلاش می‌شود',
-      { article_id: article.id, permanent },
+      outcome.status === 'failed'
+        ? 'انتشار در سایت ناموفق بود و کنار گذاشته شد؛ در پنل قابل تلاش مجدد است'
+        : 'انتشار در سایت ناموفق بود؛ تلاش بعدی زمان‌بندی شد',
+      {
+        article_id: article.id,
+        permanent,
+        attempt: outcome.attempts,
+        max_attempts: app.publishing.max_attempts,
+        next_attempt_at: outcome.nextAttemptAt,
+      },
       err,
     );
 
@@ -272,7 +284,10 @@ async function publishOne(
       level: 'error',
       message: `انتشار در سایت ناموفق: ${message}`,
       articleId: article.id,
-      meta: { target: 'website', permanent },
+      meta: {
+        target: 'website', permanent,
+        attempt: outcome.attempts, gave_up: outcome.status === 'failed',
+      },
     });
   }
 }

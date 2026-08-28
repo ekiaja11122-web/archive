@@ -1,0 +1,10 @@
+# پاک‌سازی هفتگی دادهٔ قدیمی‌تر از ۹۰ روز
+[Unit]
+Description=پاک‌سازی هفتگی کاکو نیوز
+
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

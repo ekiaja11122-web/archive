@@ -1,0 +1,20 @@
+# اجرای روزانهٔ پشتیبان‌گیری، ساعت ۳ بامداد
+#
+# نصب:
+#   sudo cp deploy/kako-backup.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now kako-backup.timer
+#
+# بررسی زمان اجرای بعدی:  systemctl list-timers kako-backup
+
+[Unit]
+Description=پشتیبان‌گیری روزانهٔ کاکو نیوز
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+# اگر سرور در آن ساعت خاموش بوده، پس از روشن شدن جبران شود
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

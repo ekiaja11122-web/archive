@@ -53,6 +53,8 @@ const appConfigSchema = z.object({
   }),
   publishing: z.object({
     default_targets: z.array(z.enum(['website', 'telegram'])).default(['website', 'telegram']),
+    max_attempts: z.number().int().positive().default(5),
+    retry_backoff_seconds: z.number().int().positive().default(300),
     wordpress: z.object({
       post_status: z.enum(['publish', 'draft', 'pending']).default('publish'),
       category_map: z.record(z.string(), z.number()).default({}),
@@ -68,6 +70,17 @@ const appConfigSchema = z.object({
     enabled: z.boolean().default(true),
     min_poll_interval_seconds: z.number().int().positive().default(300),
     concurrency: z.number().int().positive().default(3),
+    pipeline_interval_seconds: z.number().int().positive().default(300),
+    publish_interval_seconds: z.number().int().positive().default(120),
+    stages: z
+      .object({
+        collect: z.boolean().default(true),
+        filter: z.boolean().default(true),
+        dedup: z.boolean().default(true),
+        rewrite: z.boolean().default(true),
+        publish: z.boolean().default(true),
+      })
+      .default({}),
   }),
 });
 

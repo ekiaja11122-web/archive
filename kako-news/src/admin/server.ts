@@ -34,7 +34,7 @@ import {
   updateArticleContent, approveArticle, rejectArticle, countArticlesByStatus,
 } from '../db/repositories/articles.ts';
 import {
-  requestPublication, publicationsFor, type PublishTarget,
+  requestPublication, publicationsFor, retryPublication, type PublishTarget,
 } from '../db/repositories/publications.ts';
 import { countByStatus } from '../db/repositories/raw-articles.ts';
 import { listSources } from '../db/repositories/sources.ts';
@@ -426,6 +426,33 @@ export async function buildAdminServer(): Promise<FastifyInstance> {
 
     logger.info('خبر تأیید شد', { article_id: id, targets, user: session.user.username });
     return redirectWithMessage(reply, '/', `خبر تأیید شد و برای انتشار در ${labels} در صف قرار گرفت`);
+  });
+
+  // ---------------- تلاش مجدد انتشار ----------------
+  server.post('/articles/:id/retry', async (request, reply) => {
+    const session = currentSession(request)!;
+    const id = Number((request.params as { id: string }).id);
+
+    const publications = await publicationsFor(id);
+    const failed = publications.filter((p) => p.status === 'failed');
+
+    if (failed.length === 0) {
+      return redirectWithMessage(reply, `/articles/${id}`, 'انتشار ناموفقی برای تلاش مجدد نیست', 'warn');
+    }
+
+    let restored = 0;
+    for (const publication of failed) {
+      if (await retryPublication(publication.id)) restored++;
+    }
+
+    await recordEvent({
+      stage: 'publish',
+      message: `سردبیر «${session.user.username}» ${restored} انتشار ناموفق را به صف برگرداند`,
+      articleId: id,
+    });
+
+    logger.info('انتشار ناموفق به صف برگشت', { article_id: id, count: restored });
+    return redirectWithMessage(reply, `/articles/${id}`, `${restored} انتشار به صف برگشت`);
   });
 
   // ---------------- رد کردن ----------------

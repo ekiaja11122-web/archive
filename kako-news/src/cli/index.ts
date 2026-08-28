@@ -19,7 +19,9 @@
  *   publish        ارسال خبرهای تأییدشده به سایت و کانال تلگرام
  *   serve          راه‌اندازی پنل مدیریت (صف تأیید)
  *   admin:create   ساخت یا تغییر رمز کاربر پنل
- *   worker         اجرای مداوم زمان‌بند تا زمان توقف دستی
+ *   worker         اجرای مداوم کل پایپ‌لاین تا زمان توقف دستی
+ *   doctor         بررسی سلامت کل سامانه
+ *   cleanup        پاک‌سازی دادهٔ قدیمی
  */
 import { env } from '../config/env.ts';
 import { loadAppConfig } from '../config/app-config.ts';
@@ -42,6 +44,8 @@ import { runWebsitePublisher, isWordPressConfigured, createWordPressClient } fro
 import { runTelegramPublisher, isTelegramConfigured, createTelegramClient } from '../publisher/channel.ts';
 import { pendingPublications } from '../db/repositories/publications.ts';
 import { createAdminUser, adminUserCount } from '../admin/auth.ts';
+import { runDoctor } from './doctor.ts';
+import { runCleanup } from './cleanup.ts';
 import { runSchedulerUntilSignal } from '../pipeline/scheduler.ts';
 import { supportedTypes } from '../collectors/registry.ts';
 import { formatTehran } from '../lib/date.ts';
@@ -417,8 +421,29 @@ const COMMANDS: Record<string, { describe: string; run: () => Promise<number> }>
     },
   },
 
+  doctor: {
+    describe: 'بررسی سلامت کل سامانه  [--deep برای آزمودن اتصال‌های بیرونی]',
+    run: async () => runDoctor({ deep: hasFlag('--deep') }),
+  },
+
+  cleanup: {
+    describe: 'پاک‌سازی دادهٔ قدیمی  [--days=<n>] [--dry-run]',
+    run: async () => {
+      const days = Number(flagValue('--days') ?? 90);
+      const result = await runCleanup({ days, dryRun: hasFlag('--dry-run') });
+      process.stdout.write(
+        `\n  خبر خام نامرتبط/تکراری قدیمی‌تر از ${days} روز: ${result.rawArticles}\n` +
+        `  رویداد پایپ‌لاین                        : ${result.events}\n` +
+        `  تاریخچهٔ اجرا                            : ${result.jobRuns}\n` +
+        `  فایل تصویر بدون استفاده                  : ${result.images}\n` +
+        (hasFlag('--dry-run') ? '  (حالت آزمایشی — چیزی پاک نشد)\n' : '') + '\n',
+      );
+      return 0;
+    },
+  },
+
   worker: {
-    describe: 'اجرای مداوم زمان‌بند (Ctrl+C برای توقف)',
+    describe: 'اجرای مداوم کل پایپ‌لاین: جمع‌آوری ← پردازش ← انتشار (Ctrl+C برای توقف)',
     run: async () => {
       await runSchedulerUntilSignal();
       return 0;

@@ -298,13 +298,24 @@ async function publishOne(
     const permanent = isPermanentTelegramFailure(err);
 
     await setArticleStatus(article.id, 'approved');
-    await markPublicationFailed(publication.id, message);
+    const outcome = await markPublicationFailed(publication.id, message, {
+      permanent,
+      maxAttempts: app.publishing.max_attempts,
+      backoffSeconds: app.publishing.retry_backoff_seconds,
+    });
 
+    // پیام لاگ باید همان چیزی را بگوید که واقعاً اتفاق افتاده
     logger.error(
-      permanent
-        ? 'انتشار در کانال ناموفق بود (مشکل تنظیمات یا ساختار پیام)'
-        : 'انتشار در کانال ناموفق بود؛ در اجرای بعدی دوباره تلاش می‌شود',
-      { article_id: article.id, permanent },
+      outcome.status === 'failed'
+        ? 'انتشار در کانال ناموفق بود و کنار گذاشته شد؛ در پنل قابل تلاش مجدد است'
+        : 'انتشار در کانال ناموفق بود؛ تلاش بعدی زمان‌بندی شد',
+      {
+        article_id: article.id,
+        permanent,
+        attempt: outcome.attempts,
+        max_attempts: app.publishing.max_attempts,
+        next_attempt_at: outcome.nextAttemptAt,
+      },
       err,
     );
 
@@ -313,7 +324,10 @@ async function publishOne(
       level: 'error',
       message: `انتشار در کانال ناموفق: ${message}`,
       articleId: article.id,
-      meta: { target: 'telegram', permanent },
+      meta: {
+        target: 'telegram', permanent,
+        attempt: outcome.attempts, gave_up: outcome.status === 'failed',
+      },
     });
   }
 }

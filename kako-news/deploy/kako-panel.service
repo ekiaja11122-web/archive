@@ -1,0 +1,52 @@
+# پنل مدیریت کاکو نیوز (صف تأیید)
+#
+# نصب:
+#   sudo cp deploy/kako-panel.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now kako-panel
+#
+# ⚠️ پنل روی 127.0.0.1 گوش می‌دهد و مستقیم از اینترنت در دسترس نیست.
+#    دسترسی از بیرون باید از طریق Nginx با گواهی SSL باشد
+#    (نمونهٔ کانفیگ: deploy/nginx-kako.conf)
+
+[Unit]
+Description=کاکو نیوز — پنل مدیریت و صف تأیید
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=kako
+Group=kako
+WorkingDirectory=/opt/kako-news
+
+Environment=NODE_ENV=production
+Environment=LOG_FORMAT=json
+Environment=TZ=Asia/Tehran
+EnvironmentFile=/opt/kako-news/.env
+
+ExecStart=/usr/bin/node --env-file-if-exists=.env --experimental-strip-types src/cli/index.ts serve
+
+Restart=always
+RestartSec=10
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kako-panel
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/kako-news/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

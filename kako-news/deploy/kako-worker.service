@@ -1,0 +1,62 @@
+# سرویس پس‌زمینهٔ کاکو نیوز — جمع‌آوری، فیلتر، بازنویسی و انتشار
+#
+# نصب:
+#   sudo cp deploy/kako-worker.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now kako-worker
+#
+# دیدن لاگ زنده:
+#   journalctl -u kako-worker -f
+
+[Unit]
+Description=کاکو نیوز — سرویس جمع‌آوری و انتشار خبر
+Documentation=https://github.com/ekiaja11122-web/archive
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=kako
+Group=kako
+WorkingDirectory=/opt/kako-news
+
+# لاگ در حالت سرویس باید JSON باشد تا journald و ابزارهای بعدی
+# بتوانند فیلدها را بفهمند
+Environment=NODE_ENV=production
+Environment=LOG_FORMAT=json
+Environment=TZ=Asia/Tehran
+EnvironmentFile=/opt/kako-news/.env
+
+ExecStart=/usr/bin/node --env-file-if-exists=.env --experimental-strip-types src/cli/index.ts worker
+
+# اگر پروسه بمیرد دوباره بالا می‌آید، ولی نه بی‌نهایت سریع
+Restart=always
+RestartSec=15
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+# مهلت خاموش شدن تمیز: زمان‌بند باید دور جاری را تمام کند
+KillSignal=SIGTERM
+TimeoutStopSec=90
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kako-worker
+
+# --- سخت‌سازی ---
+# سرویس فقط به پوشهٔ خودش نیاز دارد (تصاویر دانلودشده آنجا ذخیره می‌شوند)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/kako-news/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

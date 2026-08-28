@@ -212,6 +212,15 @@ export function reviewPage(options: {
                   <span class="badge ${PUBLICATION_BADGE[pub.status] ?? 'warn'}">
                     ${PUBLICATION_LABELS[pub.status] ?? pub.status}
                   </span>
+                  ${pub.status === 'pending' && pub.attempts > 0
+                    ? html`<div class="small muted">
+                        تلاش ${pub.attempts} ناموفق بود — تلاش بعدی
+                        ${formatTehran(pub.next_attempt_at)}
+                      </div>`
+                    : ''}
+                  ${pub.status === 'failed' && pub.attempts > 0
+                    ? html`<div class="small muted">پس از ${pub.attempts} تلاش کنار گذاشته شد</div>`
+                    : ''}
                   ${pub.error ? html`<div class="small muted">${truncate(pub.error, 120)}</div>` : ''}
                 </td>
                 <td>${pub.external_url
@@ -221,6 +230,12 @@ export function reviewPage(options: {
               </tr>`,
             )}
           </table>
+          ${publications.some((p) => p.status === 'failed')
+            ? html`<form method="post" action="/articles/${article.id}/retry" style="margin-top:12px">
+                <input type="hidden" name="_csrf" value="${csrf}">
+                <button type="submit" class="btn">تلاش مجدد برای انتشارهای ناموفق</button>
+              </form>`
+            : ''}
         </div>`
       : ''}
 

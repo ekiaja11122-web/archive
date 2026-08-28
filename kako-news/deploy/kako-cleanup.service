@@ -1,0 +1,15 @@
+[Unit]
+Description=کاکو نیوز — پاک‌سازی دادهٔ قدیمی
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=kako
+Group=kako
+WorkingDirectory=/opt/kako-news
+Environment=LOG_FORMAT=json
+EnvironmentFile=/opt/kako-news/.env
+ExecStart=/usr/bin/node --env-file-if-exists=.env --experimental-strip-types src/cli/index.ts cleanup --days=90
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kako-cleanup
