@@ -16,6 +16,7 @@
  *   rewrite        بازنویسی خبرهای آماده و قرار دادن در صف تأیید
  *   queue          نمایش صف تأیید
  *   pipeline       اجرای پشت‌سرهم: collect → filter → dedup → rewrite
+ *   publish        ارسال خبرهای تأییدشده به مقصدهایشان
  *   serve          راه‌اندازی پنل مدیریت (صف تأیید)
  *   admin:create   ساخت یا تغییر رمز کاربر پنل
  *   worker         اجرای مداوم زمان‌بند تا زمان توقف دستی
@@ -37,6 +38,8 @@ import {
 } from '../db/repositories/articles.ts';
 import { isOpenAiConfigured } from '../lib/openai.ts';
 import { startAdminServer } from '../admin/server.ts';
+import { runWebsitePublisher, isWordPressConfigured, createWordPressClient } from '../publisher/website.ts';
+import { pendingPublications } from '../db/repositories/publications.ts';
 import { createAdminUser, adminUserCount } from '../admin/auth.ts';
 import { runSchedulerUntilSignal } from '../pipeline/scheduler.ts';
 import { supportedTypes } from '../collectors/registry.ts';
@@ -292,6 +295,39 @@ const COMMANDS: Record<string, { describe: string; run: () => Promise<number> }>
       process.stdout.write(`  خبرهای خام      : ${JSON.stringify(raw)}\n`);
       process.stdout.write(`  خبرهای بازنویسی‌شده: ${JSON.stringify(articles)}\n\n`);
       return 0;
+    },
+  },
+
+  publish: {
+    describe: 'ارسال خبرهای تأییدشده به سایت  [--dry-run] [--limit=<n>] [--check]',
+    run: async () => {
+      // --check فقط اتصال را می‌آزماید، چیزی منتشر نمی‌کند
+      if (hasFlag('--check')) {
+        if (!isWordPressConfigured()) {
+          logger.error('وردپرس تنظیم نشده', {
+            help: 'WORDPRESS_URL، WORDPRESS_USERNAME و WORDPRESS_APP_PASSWORD را در .env بگذارید',
+          });
+          return 1;
+        }
+        const me = await createWordPressClient().checkConnection();
+        logger.info('اتصال به وردپرس برقرار است', { user: me.name, url: env().WORDPRESS_URL });
+        return 0;
+      }
+
+      const queued = await pendingPublications(undefined, 100);
+      const website = queued.filter((p) => p.target === 'website').length;
+      const telegram = queued.filter((p) => p.target === 'telegram').length;
+
+      const dryRun = hasFlag('--dry-run');
+      const stats = await runWebsitePublisher({ dryRun, limit: Number(flagValue('--limit') ?? 20) });
+
+      process.stdout.write(
+        `\n  سایت   : ${stats.published} منتشر شد، ${stats.failed} ناموفق (از ${stats.examined} در صف)\n` +
+        (telegram > 0 ? `  تلگرام : ${telegram} خبر در صف — مایل‌استون ۷\n` : '') +
+        (dryRun ? '  (حالت آزمایشی — چیزی منتشر نشد)\n' : '') + '\n',
+      );
+      void website;
+      return stats.failed > 0 ? 1 : 0;
     },
   },
 

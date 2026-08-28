@@ -40,6 +40,7 @@ import { countByStatus } from '../db/repositories/raw-articles.ts';
 import { listSources } from '../db/repositories/sources.ts';
 import { recordEvent } from '../db/repositories/job-runs.ts';
 import { buildSourceLine } from '../pipeline/rewrite-validate.ts';
+import { registerPublicApi } from './api.ts';
 
 const logger = createLogger('admin');
 
@@ -136,7 +137,9 @@ export async function buildAdminServer(): Promise<FastifyInstance> {
   /** نشست را می‌خواند و کاربر را روی درخواست می‌گذارد. */
   server.addHook('preHandler', async (request, reply) => {
     const url = request.url.split('?')[0] ?? '';
-    const isPublic = url === '/login' || url === '/healthz';
+    // API خواندنی عمومی است: فقط خبرهای منتشرشده را می‌دهد و
+    // فرانت‌اند جدا باید بتواند بدون نشست بخواند.
+    const isPublic = url === '/login' || url === '/healthz' || url.startsWith('/api/');
 
     const token = request.cookies[SESSION_COOKIE];
     const userId = readSessionToken(token);
@@ -168,8 +171,9 @@ export async function buildAdminServer(): Promise<FastifyInstance> {
     }
   });
 
-  // ---------------- سلامت ----------------
+  // ---------------- سلامت و API عمومی ----------------
   server.get('/healthz', async () => ({ ok: true }));
+  registerPublicApi(server);
 
   // ---------------- ورود و خروج ----------------
   server.get('/login', async (request, reply) => {

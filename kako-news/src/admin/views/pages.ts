@@ -15,6 +15,20 @@ const TARGET_LABELS: Record<string, string> = {
   telegram: 'کانال تلگرام',
 };
 
+const PUBLICATION_LABELS: Record<string, string> = {
+  pending: 'در صف ارسال',
+  sent: 'ارسال شد',
+  failed: 'ناموفق',
+  skipped: 'صرف‌نظر شد',
+};
+
+const PUBLICATION_BADGE: Record<string, string> = {
+  pending: 'warn',
+  sent: '',
+  failed: 'danger',
+  skipped: 'plain',
+};
+
 const STATUS_LABELS: Record<string, string> = {
   pending_review: 'در انتظار تأیید',
   approved: 'تأیید شده',
@@ -195,10 +209,8 @@ export function reviewPage(options: {
               (pub) => html`<tr>
                 <td>${TARGET_LABELS[pub.target] ?? pub.target}</td>
                 <td>
-                  <span class="badge ${pub.status === 'sent' ? '' : pub.status === 'failed' ? 'danger' : 'warn'}">
-                    ${pub.status === 'sent' ? 'ارسال شد'
-                      : pub.status === 'failed' ? 'ناموفق'
-                      : pub.status === 'pending' ? 'در صف ارسال' : pub.status}
+                  <span class="badge ${PUBLICATION_BADGE[pub.status] ?? 'warn'}">
+                    ${PUBLICATION_LABELS[pub.status] ?? pub.status}
                   </span>
                   ${pub.error ? html`<div class="small muted">${truncate(pub.error, 120)}</div>` : ''}
                 </td>

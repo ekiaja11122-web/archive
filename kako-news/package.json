@@ -25,7 +25,8 @@
     "rewrite": "npm run kako -- rewrite",
     "queue": "npm run kako -- queue",
     "serve": "npm run kako -- serve",
-    "admin:create": "npm run kako -- admin:create"
+    "admin:create": "npm run kako -- admin:create",
+    "publish": "npm run kako -- publish"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
