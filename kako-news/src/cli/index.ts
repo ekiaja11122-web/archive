@@ -16,7 +16,7 @@
  *   rewrite        بازنویسی خبرهای آماده و قرار دادن در صف تأیید
  *   queue          نمایش صف تأیید
  *   pipeline       اجرای پشت‌سرهم: collect → filter → dedup → rewrite
- *   publish        ارسال خبرهای تأییدشده به مقصدهایشان
+ *   publish        ارسال خبرهای تأییدشده به سایت و کانال تلگرام
  *   serve          راه‌اندازی پنل مدیریت (صف تأیید)
  *   admin:create   ساخت یا تغییر رمز کاربر پنل
  *   worker         اجرای مداوم زمان‌بند تا زمان توقف دستی
@@ -39,6 +39,7 @@ import {
 import { isOpenAiConfigured } from '../lib/openai.ts';
 import { startAdminServer } from '../admin/server.ts';
 import { runWebsitePublisher, isWordPressConfigured, createWordPressClient } from '../publisher/website.ts';
+import { runTelegramPublisher, isTelegramConfigured, createTelegramClient } from '../publisher/channel.ts';
 import { pendingPublications } from '../db/repositories/publications.ts';
 import { createAdminUser, adminUserCount } from '../admin/auth.ts';
 import { runSchedulerUntilSignal } from '../pipeline/scheduler.ts';
@@ -299,35 +300,84 @@ const COMMANDS: Record<string, { describe: string; run: () => Promise<number> }>
   },
 
   publish: {
-    describe: 'ارسال خبرهای تأییدشده به سایت  [--dry-run] [--limit=<n>] [--check]',
+    describe: 'ارسال خبرهای تأییدشده  [--target=website|telegram] [--dry-run] [--check]',
     run: async () => {
-      // --check فقط اتصال را می‌آزماید، چیزی منتشر نمی‌کند
+      const target = flagValue('--target');
+      const doWebsite = !target || target === 'website';
+      const doTelegram = !target || target === 'telegram';
+
+      // --check فقط اتصال‌ها را می‌آزماید، چیزی منتشر نمی‌کند
       if (hasFlag('--check')) {
-        if (!isWordPressConfigured()) {
-          logger.error('وردپرس تنظیم نشده', {
-            help: 'WORDPRESS_URL، WORDPRESS_USERNAME و WORDPRESS_APP_PASSWORD را در .env بگذارید',
-          });
-          return 1;
+        let failures = 0;
+
+        if (doWebsite) {
+          if (!isWordPressConfigured()) {
+            process.stdout.write('  · وردپرس  — تنظیم نشده (WORDPRESS_* در .env)\n');
+            failures++;
+          } else {
+            try {
+              const me = await createWordPressClient().checkConnection();
+              process.stdout.write(`  ✓ وردپرس  — متصل به‌عنوان «${me.name}»\n`);
+            } catch (err) {
+              process.stdout.write(`  ✗ وردپرس  — ${errorMessage(err).slice(0, 90)}\n`);
+              failures++;
+            }
+          }
         }
-        const me = await createWordPressClient().checkConnection();
-        logger.info('اتصال به وردپرس برقرار است', { user: me.name, url: env().WORDPRESS_URL });
-        return 0;
+
+        if (doTelegram) {
+          if (!isTelegramConfigured()) {
+            process.stdout.write('  · تلگرام  — تنظیم نشده (TELEGRAM_* در .env)\n');
+            failures++;
+          } else {
+            try {
+              const bot = await createTelegramClient().checkConnection();
+              process.stdout.write(
+                `  ✓ تلگرام  — ربات @${bot.username} → کانال ${env().TELEGRAM_CHANNEL_ID}\n` +
+                '            (مطمئن شوید ربات در کانال ادمین است)\n',
+              );
+            } catch (err) {
+              process.stdout.write(`  ✗ تلگرام  — ${errorMessage(err).slice(0, 90)}\n`);
+              failures++;
+            }
+          }
+        }
+        process.stdout.write('\n');
+        return failures > 0 ? 1 : 0;
       }
 
-      const queued = await pendingPublications(undefined, 100);
-      const website = queued.filter((p) => p.target === 'website').length;
-      const telegram = queued.filter((p) => p.target === 'telegram').length;
-
       const dryRun = hasFlag('--dry-run');
-      const stats = await runWebsitePublisher({ dryRun, limit: Number(flagValue('--limit') ?? 20) });
+      const limit = Number(flagValue('--limit') ?? 20);
 
-      process.stdout.write(
-        `\n  سایت   : ${stats.published} منتشر شد، ${stats.failed} ناموفق (از ${stats.examined} در صف)\n` +
-        (telegram > 0 ? `  تلگرام : ${telegram} خبر در صف — مایل‌استون ۷\n` : '') +
-        (dryRun ? '  (حالت آزمایشی — چیزی منتشر نشد)\n' : '') + '\n',
-      );
-      void website;
-      return stats.failed > 0 ? 1 : 0;
+      // ترتیب مهم است: اول سایت، بعد تلگرام — تا لینک پست تلگرام به
+      // نشانی واقعی خبر در سایت اشاره کند، نه نشانی حدسی.
+      const website = doWebsite
+        ? await runWebsitePublisher({ dryRun, limit })
+        : { examined: 0, published: 0, failed: 0 };
+
+      const telegram = doTelegram
+        ? await runTelegramPublisher({ dryRun, limit })
+        : { examined: 0, published: 0, failed: 0 };
+
+      process.stdout.write('\n');
+      if (doWebsite) {
+        process.stdout.write(
+          `  سایت   : ${website.published} منتشر شد، ${website.failed} ناموفق (از ${website.examined} در صف)\n`,
+        );
+      }
+      if (doTelegram) {
+        process.stdout.write(
+          `  تلگرام : ${telegram.published} منتشر شد، ${telegram.failed} ناموفق (از ${telegram.examined} در صف)\n`,
+        );
+      }
+
+      const stillQueued = await pendingPublications(undefined, 100);
+      if (stillQueued.length > 0) {
+        process.stdout.write(`  در صف  : ${stillQueued.length} درخواست انتشار باقی مانده\n`);
+      }
+      process.stdout.write((dryRun ? '  (حالت آزمایشی — چیزی منتشر نشد)\n' : '') + '\n');
+
+      return website.failed + telegram.failed > 0 ? 1 : 0;
     },
   },
 

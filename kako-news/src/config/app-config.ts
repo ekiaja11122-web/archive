@@ -60,6 +60,8 @@ const appConfigSchema = z.object({
     telegram: z.object({
       prefer_photo: z.boolean().default(true),
       disable_web_page_preview: z.boolean().default(false),
+      read_more_label: z.string().default('ادامه در سایت کاکو نیوز'),
+      delay_between_posts_ms: z.number().int().min(0).default(3000),
     }),
   }),
   scheduler: z.object({
