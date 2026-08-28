@@ -1,0 +1,29 @@
+{
+  "name": "kako-news",
+  "version": "0.1.0",
+  "description": "سامانهٔ خبرخوان و انتشار خودکار محتوا برای خبرگزاری محلی کاکو نیوز (شیراز)",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "kako": "node --env-file-if-exists=.env --experimental-strip-types src/cli/index.ts",
+    "migrate": "npm run kako -- migrate",
+    "db:status": "npm run kako -- db:status",
+    "config:check": "npm run kako -- config:check"
+  },
+  "dependencies": {
+    "pg": "^8.13.1",
+    "yaml": "^2.6.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.7.2"
+  },
+  "license": "MIT"
+}

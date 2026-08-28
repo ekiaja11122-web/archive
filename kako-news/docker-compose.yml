@@ -1,0 +1,25 @@
+# دیتابیس محلی برای توسعه.
+#   docker compose up -d
+# اگر PostgreSQL را مستقیم روی سیستم نصب کرده‌اید، به این فایل نیازی نیست.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: kako-news-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kako
+      POSTGRES_PASSWORD: kako
+      POSTGRES_DB: kako_news
+      TZ: Asia/Tehran
+    ports:
+      - "5432:5432"
+    volumes:
+      - kako-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kako -d kako_news"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  kako-pgdata:
