@@ -40,6 +40,10 @@ const appConfigSchema = z.object({
     system_prompt_file: z.string().default('config/prompts/rewrite.system.md'),
     style_guide_file: z.string().default('config/style-guide.md'),
     max_retries: z.number().int().min(0).default(2),
+    max_verbatim_ratio: z.number().min(0).max(1).default(0.15),
+    max_verbatim_run: z.number().int().positive().default(12),
+    append_source_line: z.boolean().default(true),
+    source_line_template: z.string().default('منبع: {{SOURCES}}'),
   }),
   images: z.object({
     download_enabled: z.boolean().default(true),

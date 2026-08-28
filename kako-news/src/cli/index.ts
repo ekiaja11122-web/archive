@@ -13,7 +13,9 @@
  *   collect        اجرای یک دور جمع‌آوری (اختیاری: --source=<slug> --force)
  *   filter         فیلتر مرتبط‌بودن با شیراز (اختیاری: --dry-run)
  *   dedup          تشخیص خبرهای تکراری (اختیاری: --dry-run)
- *   pipeline       اجرای پشت‌سرهم: collect → filter → dedup
+ *   rewrite        بازنویسی خبرهای آماده و قرار دادن در صف تأیید
+ *   queue          نمایش صف تأیید
+ *   pipeline       اجرای پشت‌سرهم: collect → filter → dedup → rewrite
  *   worker         اجرای مداوم زمان‌بند تا زمان توقف دستی
  */
 import { env } from '../config/env.ts';
@@ -26,6 +28,11 @@ import { countByStatus } from '../db/repositories/raw-articles.ts';
 import { runCollection } from '../pipeline/collect.ts';
 import { runFilter } from '../pipeline/relevance.ts';
 import { runDedup } from '../pipeline/dedup.ts';
+import { runRewrite } from '../pipeline/rewrite.ts';
+import { buildSourceLine } from '../pipeline/rewrite-validate.ts';
+import {
+  articlesByStatus, articleSources, countArticlesByStatus,
+} from '../db/repositories/articles.ts';
 import { isOpenAiConfigured } from '../lib/openai.ts';
 import { runSchedulerUntilSignal } from '../pipeline/scheduler.ts';
 import { supportedTypes } from '../collectors/registry.ts';
@@ -213,25 +220,73 @@ const COMMANDS: Record<string, { describe: string; run: () => Promise<number> }>
     },
   },
 
+  rewrite: {
+    describe: 'بازنویسی خبرهای آماده و قرار دادن در صف تأیید  [--dry-run] [--limit=<n>]',
+    run: async () => {
+      const dryRun = hasFlag('--dry-run');
+      const stats = await runRewrite({ dryRun, limit: Number(flagValue('--limit') ?? 20) });
+      process.stdout.write(
+        `\n  بررسی‌شده: ${stats.examined}   بازنویسی‌شده: ${stats.created}   ` +
+        `ناموفق: ${stats.failed}   رد شده: ${stats.skipped}\n` +
+        (dryRun ? '  (حالت آزمایشی — چیزی در دیتابیس ثبت نشد)\n' : '') + '\n',
+      );
+      return 0;
+    },
+  },
+
+  queue: {
+    describe: 'نمایش صف تأیید (خبرهای منتظر تصمیم سردبیر)',
+    run: async () => {
+      const app = loadAppConfig();
+      const pending = await articlesByStatus('pending_review', Number(flagValue('--limit') ?? 20));
+
+      if (pending.length === 0) {
+        logger.info('صف تأیید خالی است');
+        return 0;
+      }
+
+      process.stdout.write(`\n  ${pending.length} خبر در انتظار تأیید:\n\n`);
+      for (const article of pending) {
+        const sources = await articleSources(article.id);
+        const supplementary = sources.filter((s) => s.role === 'supplementary').length;
+
+        process.stdout.write(`  ── #${article.id} ─────────────────────────────────\n`);
+        process.stdout.write(`  تیتر : ${article.title}\n`);
+        process.stdout.write(`  دسته : ${article.category}    برچسب‌ها: ${article.tags.join('، ')}\n`);
+        process.stdout.write(`  لید  : ${article.lead}\n`);
+        process.stdout.write(
+          `  ${buildSourceLine(sources, app.rewrite.source_line_template)}` +
+          `${supplementary > 0 ? `  (+${supplementary} منبع تکمیلی)` : ''}\n`,
+        );
+        process.stdout.write(`  نشانی: /${article.slug}\n\n`);
+      }
+      return 0;
+    },
+  },
+
   pipeline: {
-    describe: 'اجرای پشت‌سرهم مراحل: جمع‌آوری ← فیلتر ← تشخیص تکراری  [--force]',
+    describe: 'اجرای پشت‌سرهم: جمع‌آوری ← فیلتر ← تکراری ← بازنویسی  [--force]',
     run: async () => {
       const force = hasFlag('--force');
       const collected = await runCollection({ force });
       const filtered = await runFilter({});
       const deduped = await runDedup({});
+      const rewritten = await runRewrite({});
 
       const found = collected.reduce((n, s) => n + s.found, 0);
       const fresh = collected.reduce((n, s) => n + s.inserted, 0);
       process.stdout.write(
-        `\n  جمع‌آوری: ${found} یافت‌شده، ${fresh} تازه\n` +
-        `  فیلتر  : ${filtered.relevant} مرتبط، ${filtered.irrelevant} نامرتبط\n` +
-        `  تکراری : ${deduped.unique} یکتا، ${deduped.duplicates} تکراری\n` +
-        `  آمادهٔ بازنویسی: ${deduped.unique}\n\n`,
+        `\n  جمع‌آوری : ${found} یافت‌شده، ${fresh} تازه\n` +
+        `  فیلتر   : ${filtered.relevant} مرتبط، ${filtered.irrelevant} نامرتبط\n` +
+        `  تکراری  : ${deduped.unique} یکتا، ${deduped.duplicates} تکراری\n` +
+        `  بازنویسی: ${rewritten.created} خبر ساخته شد، ${rewritten.failed} ناموفق\n` +
+        `\n  ${rewritten.created} خبر در صف تأیید قرار گرفت (npm run queue)\n\n`,
       );
 
-      const counts = await countByStatus();
-      process.stdout.write(`  وضعیت خبرهای خام: ${JSON.stringify(counts)}\n\n`);
+      const raw = await countByStatus();
+      const articles = await countArticlesByStatus();
+      process.stdout.write(`  خبرهای خام      : ${JSON.stringify(raw)}\n`);
+      process.stdout.write(`  خبرهای بازنویسی‌شده: ${JSON.stringify(articles)}\n\n`);
       return 0;
     },
   },

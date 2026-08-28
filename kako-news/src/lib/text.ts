@@ -11,7 +11,13 @@
  */
 import crypto from 'node:crypto';
 
-// نگاشت حروف عربی به معادل فارسی
+/**
+ * نگاشت حروف عربی به معادل فارسی — **فقط برای مقایسه و هش**.
+ *
+ * این نگاشت را هرگز روی متنِ منتشرشده اعمال نکنید: «ئ» و «ؤ» حروف
+ * درست فارسی‌اند («مسئول»، «مؤسسه»). تبدیلشان به «ی» و «و» متن را
+ * غلط می‌کند («مسیول»، «موسسه»).
+ */
 const CHAR_MAP: Record<string, string> = {
   'ي': 'ی', // ي → ی
   'ى': 'ی', // ى → ی
@@ -24,8 +30,16 @@ const CHAR_MAP: Record<string, string> = {
   'ئ': 'ی', // ئ → ی
 };
 
-// اعراب و علامت‌های تشکیل که در مقایسه بی‌اثرند
-const DIACRITICS = /[ً-ٰٟۖ-ۭـ]/g;
+// اعراب و علامت‌های تشکیل.
+//
+// دو نسخه لازم است: «همزهٔ روی حرف» (U+0654) در فارسی یک علامت تزیینی
+// نیست — «گفتهٔ» و «خانهٔ» املای درست کسرهٔ اضافه‌اند. اگر در متنِ منتشرشده
+// حذفش کنیم، هر خبر با غلط نگارشی بیرون می‌رود. اما در *مقایسه و هش*
+// باید حذف شود تا «گفتهٔ» و «گفته ی» یکی شمرده شوند.
+// دقت: بازهٔ U+0660..U+0669 ارقام عربی است، نه اعراب — باید بیرون بماند
+// وگرنه «١٤٠٥» به رشتهٔ خالی تبدیل می‌شود و تاریخ خبر از بین می‌رود.
+const DIACRITICS_COMPARE = /[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g;
+const DIACRITICS_DISPLAY = /[\u064B-\u0653\u0655-\u065F\u0670\u06D6-\u06ED\u0640]/g;
 
 // نویسه‌های نامرئی: نیم‌فاصله، فاصلهٔ صفر، علامت جهت متن
 const INVISIBLE = /[​‌‍‎‏﻿]/g;
@@ -55,8 +69,10 @@ export function toPersianDigits(input: string): string {
 export function normalizeForDisplay(input: string): string {
   if (!input) return '';
   let out = input.normalize('NFC');
-  out = out.replace(DIACRITICS, '');
-  out = out.replace(/[يىكةؤئ]/g, (c) => CHAR_MAP[c] ?? c);
+  out = out.replace(DIACRITICS_DISPLAY, '');
+  // فقط حروفی که در فارسی *غلط* هستند: «ي» و «ى» و «ك» عربی.
+  // «ئ»، «ؤ»، «آ» و «ة» دست نمی‌خورند تا املای متن سالم بماند.
+  out = out.replace(/[يىك]/g, (c) => CHAR_MAP[c] ?? c);
   // فاصلهٔ اضافه پیش از علائم و نبود فاصله پس از آن‌ها
   out = out.replace(/\s+([،؛:.!؟])/g, '$1');
   out = out.replace(/([،؛:؟!])(?=[^\s\d])/g, '$1 ');
@@ -74,7 +90,7 @@ export function normalizeForDisplay(input: string): string {
 export function normalizeForCompare(input: string): string {
   if (!input) return '';
   let out = input.normalize('NFC').toLowerCase();
-  out = out.replace(DIACRITICS, '');
+  out = out.replace(DIACRITICS_COMPARE, '');
   out = out.replace(INVISIBLE, ' ');
   out = out.replace(/[يىكةأإآؤئ]/g, (c) => CHAR_MAP[c] ?? c);
   out = toEnglishDigits(out);
@@ -151,4 +167,30 @@ export function truncate(input: string, maxChars: number, ellipsis = '…'): str
 export function wordCount(input: string): number {
   const trimmed = normalizeForCompare(input);
   return trimmed ? trimmed.split(' ').length : 0;
+}
+
+/**
+ * ساخت اسلاگ سئوفرندلی فارسی برای نشانی خبر.
+ *
+ * حروف فارسی در نشانی نگه داشته می‌شوند (وردپرس و مرورگرهای امروزی
+ * پشتیبانی می‌کنند و برای سئوی فارسی بهتر از حرف‌به‌حرف لاتین‌سازی است).
+ * فقط علائم نگارشی و نویسه‌های خطرناک برای URL حذف می‌شوند.
+ */
+export function slugify(input: string, maxLength = 80): string {
+  let out = input.normalize('NFC').trim();
+  out = out.replace(DIACRITICS_COMPARE, '');
+  out = out.replace(/[يىكةؤئ]/g, (c) => CHAR_MAP[c] ?? c);
+  // نیم‌فاصله در نشانی جایی ندارد؛ به خط تیره تبدیل می‌شود
+  out = out.replace(/\u200c/g, '-');
+  out = out.replace(INVISIBLE, '');
+  // هر چیزی جز حرف، رقم و خط تیره → خط تیره
+  out = out.replace(/[^\p{L}\p{N}-]+/gu, '-');
+  out = out.replace(/-{2,}/g, '-').replace(/^-|-$/g, '');
+
+  if (out.length <= maxLength) return out || 'خبر';
+
+  // روی مرز کلمه کوتاه می‌شود تا اسلاگ نصفه‌کاره نماند
+  const cut = out.slice(0, maxLength);
+  const lastDash = cut.lastIndexOf('-');
+  return (lastDash > maxLength * 0.5 ? cut.slice(0, lastDash) : cut).replace(/-$/, '') || 'خبر';
 }

@@ -21,7 +21,9 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "filter": "npm run kako -- filter",
     "dedup": "npm run kako -- dedup",
-    "pipeline": "npm run kako -- pipeline"
+    "pipeline": "npm run kako -- pipeline",
+    "rewrite": "npm run kako -- rewrite",
+    "queue": "npm run kako -- queue"
   },
   "dependencies": {
     "cheerio": "^1.2.0",

@@ -107,3 +107,104 @@ export function articleSimilarity(
     sharedTerms: shared,
   };
 }
+
+
+/**
+ * تشخیص کپی عینی.
+ *
+ * چرا لازم است: مدل زبانی گاهی به‌جای بازنویسی، جمله‌های منبع را با
+ * جابه‌جایی چند کلمه برمی‌گرداند. این هم نقض حق نشر منبع است و هم
+ * محتوای کاکو نیوز را غیراصیل می‌کند — یعنی دقیقاً همان دو چیزی که
+ * بازنویسی برای جلوگیری از آن‌ها انجام می‌شود.
+ *
+ * روش: دنباله‌های n کلمه‌ای (n-gram) متن منبع ساخته می‌شود و می‌سنجیم چند
+ * درصدشان عیناً در متن بازنویسی‌شده آمده است. دنبالهٔ ۸ کلمه‌ای مشترک
+ * تصادفی نیست؛ یعنی جمله کپی شده است.
+ *
+ * نقل قول مستقیم داخل گیومه از سنجش کنار گذاشته می‌شود، چون حرف کسی را
+ * نباید عوض کرد و تکرار عینی‌اش کپی به حساب نمی‌آید.
+ */
+const VERBATIM_GRAM_SIZE = 8;
+
+/** حذف نقل قول‌های مستقیم، که تکرار عینی‌شان مجاز است. */
+function stripQuotes(text: string): string {
+  return text
+    .replace(/«[^»]*»/g, ' ')
+    .replace(/"[^"]*"/g, ' ')
+    .replace(/\u201c[^\u201d]*\u201d/g, ' ');
+}
+
+function ngrams(tokens: string[], size: number): Set<string> {
+  const grams = new Set<string>();
+  for (let i = 0; i + size <= tokens.length; i++) {
+    grams.add(tokens.slice(i, i + size).join(' '));
+  }
+  return grams;
+}
+
+export type VerbatimReport = {
+  /** نسبت دنباله‌های منبع که عیناً در بازنویسی آمده‌اند (۰ تا ۱) */
+  ratio: number;
+  /** طولانی‌ترین دنبالهٔ کلمات مشترک */
+  longestRun: number;
+  /** نمونه‌ای از عبارت کپی‌شده، برای نمایش به سردبیر */
+  sample: string | null;
+  /** تعداد دنباله‌های سنجیده‌شده؛ اگر خیلی کم باشد نتیجه معنادار نیست */
+  comparedGrams: number;
+};
+
+/**
+ * سنجش میزان کپی عینی متن بازنویسی‌شده از متن منبع.
+ * هرچه `ratio` بالاتر باشد، بازنویسی ضعیف‌تر است.
+ */
+export function verbatimOverlap(sourceText: string, rewrittenText: string): VerbatimReport {
+  const sourceTokens = normalizeForCompare(stripQuotes(sourceText)).split(' ').filter(Boolean);
+  const rewriteTokens = normalizeForCompare(stripQuotes(rewrittenText)).split(' ').filter(Boolean);
+
+  const sourceGrams = ngrams(sourceTokens, VERBATIM_GRAM_SIZE);
+  const rewriteGrams = ngrams(rewriteTokens, VERBATIM_GRAM_SIZE);
+
+  if (sourceGrams.size === 0 || rewriteGrams.size === 0) {
+    return { ratio: 0, longestRun: 0, sample: null, comparedGrams: sourceGrams.size };
+  }
+
+  let shared = 0;
+  let sample: string | null = null;
+  for (const gram of sourceGrams) {
+    if (rewriteGrams.has(gram)) {
+      shared++;
+      sample ??= gram;
+    }
+  }
+
+  return {
+    ratio: Math.round((shared / sourceGrams.size) * 1000) / 1000,
+    longestRun: longestCommonRun(sourceTokens, rewriteTokens),
+    sample,
+    comparedGrams: sourceGrams.size,
+  };
+}
+
+/**
+ * طولانی‌ترین دنبالهٔ کلمات مشترک بین دو متن.
+ * یک جملهٔ کامل کپی‌شده حتی اگر نسبت کلی پایین باشد، اینجا دیده می‌شود.
+ */
+function longestCommonRun(a: string[], b: string[]): number {
+  if (a.length === 0 || b.length === 0) return 0;
+
+  // فقط یک سطر از جدول را نگه می‌داریم؛ متن خبر می‌تواند طولانی باشد
+  let previous = new Array<number>(b.length + 1).fill(0);
+  let best = 0;
+
+  for (let i = 1; i <= a.length; i++) {
+    const current = new Array<number>(b.length + 1).fill(0);
+    for (let j = 1; j <= b.length; j++) {
+      if (a[i - 1] === b[j - 1]) {
+        current[j] = (previous[j - 1] ?? 0) + 1;
+        if ((current[j] ?? 0) > best) best = current[j] ?? 0;
+      }
+    }
+    previous = current;
+  }
+  return best;
+}

@@ -45,7 +45,12 @@ let cached: Env | null = null;
 export function env(): Env {
   if (cached) return cached;
 
-  const parsed = envSchema.safeParse(process.env);
+  // مقدار خالی در .env («OPENAI_API_KEY=») یعنی «تنظیم نشده»، نه «رشتهٔ خالی».
+  // بدون این، یک خط خالی در .env همهٔ فرمان‌ها را با خطای اعتبارسنجی می‌خواباند.
+  const cleaned = Object.fromEntries(
+    Object.entries(process.env).filter(([, value]) => value !== undefined && value !== ''),
+  );
+  const parsed = envSchema.safeParse(cleaned);
   if (!parsed.success) {
     const lines = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`);
     throw new Error(
