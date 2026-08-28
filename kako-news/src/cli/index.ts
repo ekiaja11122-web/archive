@@ -11,6 +11,9 @@
  *   sources:sync   همگام‌سازی config/sources.yaml با دیتابیس
  *   sources:list   نمایش منابع و وضعیت سلامتشان
  *   collect        اجرای یک دور جمع‌آوری (اختیاری: --source=<slug> --force)
+ *   filter         فیلتر مرتبط‌بودن با شیراز (اختیاری: --dry-run)
+ *   dedup          تشخیص خبرهای تکراری (اختیاری: --dry-run)
+ *   pipeline       اجرای پشت‌سرهم: collect → filter → dedup
  *   worker         اجرای مداوم زمان‌بند تا زمان توقف دستی
  */
 import { env } from '../config/env.ts';
@@ -21,6 +24,9 @@ import { ping, closePool } from '../db/pool.ts';
 import { syncSources, listSources } from '../db/repositories/sources.ts';
 import { countByStatus } from '../db/repositories/raw-articles.ts';
 import { runCollection } from '../pipeline/collect.ts';
+import { runFilter } from '../pipeline/relevance.ts';
+import { runDedup } from '../pipeline/dedup.ts';
+import { isOpenAiConfigured } from '../lib/openai.ts';
 import { runSchedulerUntilSignal } from '../pipeline/scheduler.ts';
 import { supportedTypes } from '../collectors/registry.ts';
 import { formatTehran } from '../lib/date.ts';
@@ -173,6 +179,60 @@ const COMMANDS: Record<string, { describe: string; run: () => Promise<number> }>
       const counts = await countByStatus();
       process.stdout.write(`\n  وضعیت خبرهای خام: ${JSON.stringify(counts)}\n\n`);
       return stats.some((s) => s.error) ? 1 : 0;
+    },
+  },
+
+  filter: {
+    describe: 'فیلتر مرتبط‌بودن خبرها با شیراز  [--dry-run] [--limit=<n>]',
+    run: async () => {
+      const dryRun = hasFlag('--dry-run');
+      if (!isOpenAiConfigured()) {
+        logger.warn('کلید OpenAI تنظیم نشده؛ موارد مرزی فقط با کلیدواژه تصمیم‌گیری می‌شوند');
+      }
+      const stats = await runFilter({ dryRun, limit: Number(flagValue('--limit') ?? 100) });
+      process.stdout.write(
+        `\n  بررسی‌شده: ${stats.examined}   مرتبط: ${stats.relevant}   ` +
+        `نامرتبط: ${stats.irrelevant}   پرسش از مدل: ${stats.askedLlm}\n` +
+        (dryRun ? '  (حالت آزمایشی — چیزی در دیتابیس تغییر نکرد)\n' : '') + '\n',
+      );
+      return 0;
+    },
+  },
+
+  dedup: {
+    describe: 'تشخیص خبرهای تکراری  [--dry-run] [--limit=<n>]',
+    run: async () => {
+      const dryRun = hasFlag('--dry-run');
+      const stats = await runDedup({ dryRun, limit: Number(flagValue('--limit') ?? 100) });
+      process.stdout.write(
+        `\n  بررسی‌شده: ${stats.examined}   یکتا: ${stats.unique}   ` +
+        `تکراری: ${stats.duplicates}\n` +
+        (dryRun ? '  (حالت آزمایشی — چیزی در دیتابیس تغییر نکرد)\n' : '') + '\n',
+      );
+      return 0;
+    },
+  },
+
+  pipeline: {
+    describe: 'اجرای پشت‌سرهم مراحل: جمع‌آوری ← فیلتر ← تشخیص تکراری  [--force]',
+    run: async () => {
+      const force = hasFlag('--force');
+      const collected = await runCollection({ force });
+      const filtered = await runFilter({});
+      const deduped = await runDedup({});
+
+      const found = collected.reduce((n, s) => n + s.found, 0);
+      const fresh = collected.reduce((n, s) => n + s.inserted, 0);
+      process.stdout.write(
+        `\n  جمع‌آوری: ${found} یافت‌شده، ${fresh} تازه\n` +
+        `  فیلتر  : ${filtered.relevant} مرتبط، ${filtered.irrelevant} نامرتبط\n` +
+        `  تکراری : ${deduped.unique} یکتا، ${deduped.duplicates} تکراری\n` +
+        `  آمادهٔ بازنویسی: ${deduped.unique}\n\n`,
+      );
+
+      const counts = await countByStatus();
+      process.stdout.write(`  وضعیت خبرهای خام: ${JSON.stringify(counts)}\n\n`);
+      return 0;
     },
   },
 

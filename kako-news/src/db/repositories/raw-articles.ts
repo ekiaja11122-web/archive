@@ -11,8 +11,14 @@ import { query, queryOne } from '../pool.ts';
 import { contentHash, titleFingerprint, truncate } from '../../lib/text.ts';
 import type { CollectedItem } from '../../collectors/types.ts';
 
+/**
+ * چرخهٔ وضعیت خبر خام:
+ *   new → (فیلتر شیراز) → irrelevant | new
+ *       → (تشخیص تکراری) → duplicate | ready
+ *       → (بازنویسی)     → processing → processed | failed
+ */
 export type RawArticleStatus =
-  | 'new' | 'irrelevant' | 'duplicate' | 'processing' | 'processed' | 'failed';
+  | 'new' | 'irrelevant' | 'duplicate' | 'ready' | 'processing' | 'processed' | 'failed';
 
 export type RawArticleRow = {
   id: number;
@@ -112,26 +118,88 @@ export async function updateRawArticleStatus(
   fields: {
     relevanceScore?: number | null;
     relevanceReason?: string | null;
+    relevanceDetails?: Record<string, unknown> | null;
+    relevanceMethod?: 'keyword' | 'llm' | 'llm_failed' | null;
     duplicateOfId?: number | null;
+    duplicateSimilarity?: number | null;
     error?: string | null;
   } = {},
 ): Promise<void> {
   await query(
     `UPDATE raw_articles SET
-       status            = $2,
-       relevance_score   = COALESCE($3, relevance_score),
-       relevance_reason  = COALESCE($4, relevance_reason),
-       duplicate_of_id   = COALESCE($5, duplicate_of_id),
-       error             = $6
+       status               = $2,
+       relevance_score      = COALESCE($3, relevance_score),
+       relevance_reason     = COALESCE($4, relevance_reason),
+       relevance_details    = COALESCE($5::jsonb, relevance_details),
+       relevance_method     = COALESCE($6, relevance_method),
+       duplicate_of_id      = COALESCE($7, duplicate_of_id),
+       duplicate_similarity = COALESCE($8, duplicate_similarity),
+       error                = $9
      WHERE id = $1`,
     [
       id,
       status,
       fields.relevanceScore ?? null,
       fields.relevanceReason ?? null,
+      fields.relevanceDetails ? JSON.stringify(fields.relevanceDetails) : null,
+      fields.relevanceMethod ?? null,
       fields.duplicateOfId ?? null,
+      fields.duplicateSimilarity ?? null,
       fields.error?.slice(0, 2000) ?? null,
     ],
+  );
+}
+
+/** حذف کامل یک خبر خام. فقط وقتی keep_irrelevant در کانفیگ خاموش باشد. */
+export async function deleteRawArticle(id: number): Promise<void> {
+  await query('DELETE FROM raw_articles WHERE id = $1', [id]);
+}
+
+/**
+ * نامزدهای مقایسه برای تشخیص تکراری.
+ *
+ * فقط خبرهایی که **قبلاً از مرحلهٔ تشخیص تکراری رد شده‌اند** نامزد می‌شوند
+ * (یعنی وضعیت `new` ندارند). این شرط دو مشکل واقعی را حل می‌کند:
+ *   - چون خبرها به ترتیب زمان انتشار پردازش می‌شوند، همیشه قدیمی‌ترین
+ *     گزارش از یک رویداد «خبر اصلی» می‌شود، نه تازه‌ترین.
+ *   - دو خبر هم‌زمان نمی‌توانند یکدیگر را تکراری اعلام کنند و خبری
+ *     نمی‌تواند تکراریِ خودش شود.
+ * خبرهای `irrelevant` و `failed` هم بیرون‌اند: مقایسه با چیزی که خودش
+ * رد شده ارزشی ندارد.
+ */
+export async function dedupCandidates(
+  excludeId: number,
+  since: Date,
+  limit: number,
+): Promise<Pick<RawArticleRow, 'id' | 'source_id' | 'title' | 'body' | 'summary' | 'status' | 'duplicate_of_id'>[]> {
+  return query(
+    `SELECT id, source_id, title, body, summary, status, duplicate_of_id
+     FROM raw_articles
+     WHERE id <> $1
+       AND collected_at >= $2
+       AND status IN ('ready', 'processing', 'processed', 'duplicate')
+     ORDER BY collected_at DESC
+     LIMIT $3`,
+    [excludeId, since, limit],
+  );
+}
+
+/** خبرهایی که تکراریِ یک خبر مشخص تشخیص داده شده‌اند (منابع تکمیلی). */
+export async function duplicatesOf(rawArticleId: number): Promise<RawArticleRow[]> {
+  return query<RawArticleRow>(
+    'SELECT * FROM raw_articles WHERE duplicate_of_id = $1 ORDER BY collected_at',
+    [rawArticleId],
+  );
+}
+
+/** خبرهای مرتبطی که فیلتر شده‌اند و منتظر تشخیص تکراری‌اند. */
+export async function articlesAwaitingDedup(limit = 100): Promise<RawArticleRow[]> {
+  return query<RawArticleRow>(
+    `SELECT * FROM raw_articles
+     WHERE status = 'new' AND relevance_score IS NOT NULL
+     ORDER BY published_at ASC NULLS LAST, collected_at ASC
+     LIMIT $1`,
+    [limit],
   );
 }
 

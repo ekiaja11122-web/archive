@@ -18,13 +18,19 @@ const appConfigSchema = z.object({
   }),
   categories: z.array(z.string().min(1)).min(1),
   relevance: z.object({
-    min_keyword_score: z.number().min(0).default(1),
+    certain_threshold: z.number().default(4),
+    irrelevant_threshold: z.number().default(1),
+    title_multiplier: z.number().min(1).default(2),
+    max_negative_penalty: z.number().min(0).default(3),
     use_llm_for_uncertain: z.boolean().default(true),
+    llm_prompt_file: z.string().default('config/prompts/relevance.system.md'),
     keep_irrelevant: z.boolean().default(true),
   }),
   deduplication: z.object({
     lookback_hours: z.number().positive().default(48),
-    title_similarity_threshold: z.number().min(0).max(1).default(0.82),
+    similarity_threshold: z.number().min(0).max(1).default(0.45),
+    title_weight: z.number().min(0).max(1).default(0.5),
+    max_candidates: z.number().int().positive().default(200),
     on_duplicate: z.enum(['ignore', 'link']).default('link'),
   }),
   rewrite: z.object({
