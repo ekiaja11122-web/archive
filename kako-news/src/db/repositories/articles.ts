@@ -165,6 +165,92 @@ export async function articleSources(articleId: number): Promise<ArticleSourceIn
   );
 }
 
+/**
+ * ذخیرهٔ ویرایش‌های سردبیر.
+ * `edited_by_human` علامت می‌خورد تا بعداً بشود دید مدل چقدر نیاز به
+ * دست‌کاری داشته و راهنمای سبک را بر همان اساس بهبود داد.
+ */
+export async function updateArticleContent(
+  id: number,
+  fields: {
+    title: string;
+    lead: string;
+    body: string;
+    category: string;
+    tags: string[];
+    imageUrl?: string | null;
+    editorNotes?: string | null;
+  },
+): Promise<void> {
+  await query(
+    `UPDATE articles SET
+       title = $2, lead = $3, body = $4, category = $5, tags = $6,
+       image_url = $7, editor_notes = $8, edited_by_human = TRUE
+     WHERE id = $1`,
+    [
+      id, fields.title, fields.lead, fields.body, fields.category, fields.tags,
+      fields.imageUrl ?? null, fields.editorNotes ?? null,
+    ],
+  );
+}
+
+/**
+ * تأیید خبر برای انتشار.
+ * فقط خبری که در وضعیت `pending_review` است تأیید می‌شود — این شرط در
+ * خودِ کوئری است تا دو تأیید هم‌زمان، خبر را دو بار به صف انتشار نفرستد.
+ */
+export async function approveArticle(id: number, approvedBy: string): Promise<boolean> {
+  const row = await queryOne<{ id: number }>(
+    `UPDATE articles
+     SET status = 'approved', approved_at = now(), approved_by = $2, reject_reason = NULL
+     WHERE id = $1 AND status IN ('pending_review', 'rejected')
+     RETURNING id`,
+    [id, approvedBy],
+  );
+  return row !== null;
+}
+
+export async function rejectArticle(id: number, reason: string, by: string): Promise<boolean> {
+  const row = await queryOne<{ id: number }>(
+    `UPDATE articles
+     SET status = 'rejected', reject_reason = $2, approved_by = $3
+     WHERE id = $1 AND status <> 'published'
+     RETURNING id`,
+    [id, reason.slice(0, 500) || 'بدون توضیح', by],
+  );
+  return row !== null;
+}
+
+export async function setArticleStatus(id: number, status: ArticleStatus): Promise<void> {
+  await query('UPDATE articles SET status = $2 WHERE id = $1', [id, status]);
+}
+
+/** متن خام منبع اصلی، برای نمای مقایسه‌ای در پنل. */
+export type SourceComparison = {
+  raw_id: number;
+  source_name: string;
+  source_url: string;
+  raw_title: string;
+  raw_body: string | null;
+  raw_summary: string | null;
+  published_at: Date | null;
+  role: 'primary' | 'supplementary';
+};
+
+export async function comparisonSources(articleId: number): Promise<SourceComparison[]> {
+  return query<SourceComparison>(
+    `SELECT r.id AS raw_id, s.name AS source_name, r.source_url,
+            r.title AS raw_title, r.body AS raw_body, r.summary AS raw_summary,
+            r.published_at, asrc.role
+     FROM article_sources asrc
+     JOIN raw_articles r ON r.id = asrc.raw_article_id
+     JOIN sources s      ON s.id = r.source_id
+     WHERE asrc.article_id = $1
+     ORDER BY (asrc.role = 'primary') DESC, r.id`,
+    [articleId],
+  );
+}
+
 /** شمار خبرهای بازنویسی‌شده به تفکیک وضعیت — برای آمار پنل. */
 export async function countArticlesByStatus(since?: Date): Promise<Record<string, number>> {
   const rows = await query<{ status: string; count: number }>(

@@ -23,10 +23,15 @@
     "dedup": "npm run kako -- dedup",
     "pipeline": "npm run kako -- pipeline",
     "rewrite": "npm run kako -- rewrite",
-    "queue": "npm run kako -- queue"
+    "queue": "npm run kako -- queue",
+    "serve": "npm run kako -- serve",
+    "admin:create": "npm run kako -- admin:create"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/formbody": "^9.0.0",
     "cheerio": "^1.2.0",
+    "fastify": "^5.12.1",
     "pg": "^8.13.1",
     "rss-parser": "^3.13.0",
     "yaml": "^2.6.1",

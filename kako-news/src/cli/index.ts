@@ -16,6 +16,8 @@
  *   rewrite        بازنویسی خبرهای آماده و قرار دادن در صف تأیید
  *   queue          نمایش صف تأیید
  *   pipeline       اجرای پشت‌سرهم: collect → filter → dedup → rewrite
+ *   serve          راه‌اندازی پنل مدیریت (صف تأیید)
+ *   admin:create   ساخت یا تغییر رمز کاربر پنل
  *   worker         اجرای مداوم زمان‌بند تا زمان توقف دستی
  */
 import { env } from '../config/env.ts';
@@ -34,6 +36,8 @@ import {
   articlesByStatus, articleSources, countArticlesByStatus,
 } from '../db/repositories/articles.ts';
 import { isOpenAiConfigured } from '../lib/openai.ts';
+import { startAdminServer } from '../admin/server.ts';
+import { createAdminUser, adminUserCount } from '../admin/auth.ts';
 import { runSchedulerUntilSignal } from '../pipeline/scheduler.ts';
 import { supportedTypes } from '../collectors/registry.ts';
 import { formatTehran } from '../lib/date.ts';
@@ -287,6 +291,42 @@ const COMMANDS: Record<string, { describe: string; run: () => Promise<number> }>
       const articles = await countArticlesByStatus();
       process.stdout.write(`  خبرهای خام      : ${JSON.stringify(raw)}\n`);
       process.stdout.write(`  خبرهای بازنویسی‌شده: ${JSON.stringify(articles)}\n\n`);
+      return 0;
+    },
+  },
+
+  serve: {
+    describe: 'راه‌اندازی پنل مدیریت و صف تأیید',
+    run: async () => {
+      const e = env();
+      await startAdminServer();
+      process.stdout.write(
+        `\n  پنل مدیریت روی این نشانی باز است:\n` +
+        `      http://${e.ADMIN_HOST}:${e.ADMIN_PORT}\n\n` +
+        `  برای توقف Ctrl+C بزنید.\n\n`,
+      );
+      // سرور تا رسیدن سیگنال توقف زنده می‌ماند
+      await new Promise<void>(() => {});
+      return 0;
+    },
+  },
+
+  'admin:create': {
+    describe: 'ساخت کاربر پنل یا تغییر رمز  --user=<نام> --password=<رمز>',
+    run: async () => {
+      const username = flagValue('--user') ?? env().ADMIN_USERNAME;
+      const password = flagValue('--password') ?? env().ADMIN_PASSWORD;
+
+      if (!password) {
+        logger.error('رمز عبور مشخص نشده', {
+          help: 'یا --password=<رمز> بدهید یا ADMIN_PASSWORD را در .env بگذارید',
+        });
+        return 1;
+      }
+
+      const existed = (await adminUserCount()) > 0;
+      await createAdminUser(username, password, flagValue('--name') ?? 'سردبیر');
+      logger.info(existed ? 'کاربر ساخته/به‌روزرسانی شد' : 'کاربر اول پنل ساخته شد', { username });
       return 0;
     },
   },
