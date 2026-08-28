@@ -107,6 +107,82 @@ sources:
         - ".related"
         - ".tags"
 
+
+# ============================================================
+#  الگوی خبرگزاری‌های سراسری با بخش استان فارس
+#
+#  ⚠️ نشانی فید هر کدام را **خودتان تأیید کنید**، حدس نزنید:
+#
+#      npm run kako -- sources:discover https://www.isna.ir
+#
+#  این دستور فیدهای سایت را پیدا و آزمایش می‌کند و می‌گوید کدام‌شان
+#  خبر شیراز دارد. بعد بلوک آماده‌ای می‌دهد که همین‌جا بچسبانید.
+#
+#  نکتهٔ مهم: این خبرگزاری‌ها سراسری‌اند و فید اصلی‌شان پر از خبر
+#  تهران و اقتصاد کلان است. حتماً دنبال فید **استان فارس** بگردید،
+#  وگرنه فیلتر شیراز مجبور می‌شود صدها خبر بی‌ربط را کنار بگذارد و
+#  بی‌جهت به OpenAI هزینه می‌دهید.
+#
+#  پس از افزودن هر منبع:
+#      npm run sources:sync
+#      npm run kako -- sources:test <slug>
+#  دستور دوم نشان می‌دهد از هر خبر دقیقاً چه چیزی استخراج شده و
+#  کدام سلکتور کار نکرده است.
+# ============================================================
+
+  # --- ایسنا ---------------------------------------------
+  # - slug: isna-fars
+  #   name: "ایسنا — فارس"
+  #   type: rss
+  #   url: "<نشانی فید استان فارس ایسنا — با sources:discover پیدا کنید>"
+  #   homepage: "https://www.isna.ir"
+  #   enabled: true
+  #   poll_interval_seconds: 900
+  #   fetch_full_content: true
+  #   article:
+  #     # این سلکتورها را با sources:test تأیید و در صورت لزوم اصلاح کنید
+  #     body_selector: ".item-text"
+  #     image_selector: "meta[property='og:image']"
+  #     image_attribute: "content"
+  #     remove_selectors: ["script", "style", ".related-news", ".tags"]
+
+  # --- خبرگزاری فارس -------------------------------------
+  # - slug: farsnews-fars
+  #   name: "خبرگزاری فارس — استان فارس"
+  #   type: rss
+  #   url: "<نشانی فید استان فارس — با sources:discover پیدا کنید>"
+  #   homepage: "https://farsnews.ir"
+  #   enabled: true
+  #   poll_interval_seconds: 900
+  #   fetch_full_content: true
+  #   article:
+  #     body_selector: ".nt-body, article"
+  #     image_selector: "meta[property='og:image']"
+  #     image_attribute: "content"
+  #     remove_selectors: ["script", "style", ".related"]
+  #
+  #   # ⚠️ یادآوری: واژه‌نامهٔ شیراز عبارت «خبرگزاری فارس» را پیش از
+  #   #    امتیازدهی حذف می‌کند، وگرنه هر خبر این خبرگزاری به‌اشتباه
+  #   #    «مرتبط با استان فارس» شمرده می‌شد.
+
+  # --- مهر -----------------------------------------------
+  # - slug: mehr-fars
+  #   name: "مهر — استان فارس"
+  #   type: rss
+  #   url: "<نشانی فید استان فارس مهر — با sources:discover پیدا کنید>"
+  #   homepage: "https://www.mehrnews.com"
+  #   enabled: true
+  #   poll_interval_seconds: 900
+  #   fetch_full_content: true
+  #   article:
+  #     body_selector: ".item-text"
+  #     image_selector: "meta[property='og:image']"
+  #     image_attribute: "content"
+  #     remove_selectors: ["script", "style", ".related"]
+
+  # اگر سایتی اصلاً فید نداشت، صفحهٔ آرشیو اخبار فارسش را به‌صورت
+  # منبع type: scrape تعریف کنید — نمونه‌اش بالاتر آمده است.
+
 # ============================================================
 #  راهنمای پیدا کردن سلکتورها
 #  ۱. صفحهٔ منبع را در مرورگر باز کنید.

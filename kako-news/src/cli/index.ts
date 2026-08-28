@@ -9,7 +9,9 @@
  *   db:status      نمایش وضعیت اتصال و مهاجرت‌ها
  *   config:check   اعتبارسنجی .env و فایل‌های کانفیگ بدون اجرای کاری
  *   sources:sync   همگام‌سازی config/sources.yaml با دیتابیس
- *   sources:list   نمایش منابع و وضعیت سلامتشان
+ *   sources:list     نمایش منابع و وضعیت سلامتشان
+ *   sources:discover کشف خودکار فید RSS یک سایت خبری
+ *   sources:test     آزمودن یک منبع و دیدن آنچه استخراج می‌کند
  *   collect        اجرای یک دور جمع‌آوری (اختیاری: --source=<slug> --force)
  *   filter         فیلتر مرتبط‌بودن با شیراز (اختیاری: --dry-run)
  *   dedup          تشخیص خبرهای تکراری (اختیاری: --dry-run)
@@ -45,6 +47,8 @@ import { runTelegramPublisher, isTelegramConfigured, createTelegramClient } from
 import { pendingPublications } from '../db/repositories/publications.ts';
 import { createAdminUser, adminUserCount } from '../admin/auth.ts';
 import { runDoctor } from './doctor.ts';
+import { runDiscover } from './discover.ts';
+import { runSourceTest } from './test-source.ts';
 import { runCleanup } from './cleanup.ts';
 import { runSchedulerUntilSignal } from '../pipeline/scheduler.ts';
 import { supportedTypes } from '../collectors/registry.ts';
@@ -167,6 +171,28 @@ const COMMANDS: Record<string, { describe: string; run: () => Promise<number> }>
         }
       }
       return 0;
+    },
+  },
+
+  'sources:discover': {
+    describe: 'کشف خودکار فید RSS یک سایت خبری  <نشانی سایت>',
+    run: async () => {
+      const url = process.argv[3];
+      if (!url || url.startsWith('--')) {
+        process.stdout.write(
+          '\n  استفاده: npm run kako -- sources:discover https://www.example.ir\n\n',
+        );
+        return 1;
+      }
+      return runDiscover(url);
+    },
+  },
+
+  'sources:test': {
+    describe: 'آزمودن یک منبع بدون ثبت در دیتابیس  <slug> [--limit=<n>]',
+    run: async () => {
+      const slug = process.argv[3]?.startsWith('--') ? '' : (process.argv[3] ?? '');
+      return runSourceTest(slug, Number(flagValue('--limit') ?? 5));
     },
   },
 

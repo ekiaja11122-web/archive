@@ -28,7 +28,9 @@
     "admin:create": "npm run kako -- admin:create",
     "publish": "npm run kako -- publish",
     "doctor": "npm run kako -- doctor",
-    "cleanup": "npm run kako -- cleanup"
+    "cleanup": "npm run kako -- cleanup",
+    "sources:discover": "npm run kako -- sources:discover",
+    "sources:test": "npm run kako -- sources:test"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
