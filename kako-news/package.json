@@ -31,7 +31,8 @@
     "cleanup": "npm run kako -- cleanup",
     "sources:discover": "npm run kako -- sources:discover",
     "sources:test": "npm run kako -- sources:test",
-    "demo": "npm run kako -- demo"
+    "demo": "npm run kako -- demo",
+    "setup": "npm run kako -- setup"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

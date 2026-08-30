@@ -22,6 +22,7 @@
  *   serve          راه‌اندازی پنل مدیریت (صف تأیید)
  *   admin:create   ساخت یا تغییر رمز کاربر پنل
  *   worker         اجرای مداوم کل پایپ‌لاین تا زمان توقف دستی
+ *   setup          راه‌اندازی اولیه (ساخت .env، جدول‌ها و ثبت منابع)
  *   demo           اجرای نمایشی کل مسیر، بدون نیاز به کلید API
  *   doctor         بررسی سلامت کل سامانه
  *   cleanup        پاک‌سازی دادهٔ قدیمی
@@ -49,6 +50,7 @@ import { pendingPublications } from '../db/repositories/publications.ts';
 import { createAdminUser, adminUserCount } from '../admin/auth.ts';
 import { runDoctor } from './doctor.ts';
 import { runDemo } from './demo.ts';
+import { runSetup } from './setup.ts';
 import { runDiscover } from './discover.ts';
 import { runSourceTest } from './test-source.ts';
 import { runCleanup } from './cleanup.ts';
@@ -447,6 +449,11 @@ const COMMANDS: Record<string, { describe: string; run: () => Promise<number> }>
       logger.info(existed ? 'کاربر ساخته/به‌روزرسانی شد' : 'کاربر اول پنل ساخته شد', { username });
       return 0;
     },
+  },
+
+  setup: {
+    describe: 'راه‌اندازی اولیه — ساخت فایل تنظیمات، جدول‌ها و ثبت منابع  [--password=<رمز>]',
+    run: async () => runSetup({ password: flagValue('--password') }),
   },
 
   demo: {
